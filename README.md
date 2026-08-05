@@ -19,7 +19,7 @@ make clean
 
 After compiling, you can start the interactive shell session by running:
 ```bash
-./mysh
+./shelly
 ```
 
 ## Features and Examples
@@ -51,7 +51,7 @@ sleep 10 &
 Execute commands conditionally or sequentially:
 ```bash
 # AND: Runs only if the first command succeeds
-make && ./mysh
+make && ./shelly
 
 # OR: Runs only if the first command fails
 cat invalid_file.txt || echo "File not found!"
