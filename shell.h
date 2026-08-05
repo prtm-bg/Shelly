@@ -20,22 +20,25 @@
 #define MAX_SUB_CMD_SIZE 128
 #define MAX_CMD_SIZE 64
 
-/* ANSI Color & Style Codes */
-#define COL_RESET   "\033[0m"
-#define COL_BOLD    "\033[1m"
-#define COL_DIM     "\033[2m"
-#define COL_RED     "\033[31m"
-#define COL_GREEN   "\033[32m"
-#define COL_YELLOW  "\033[33m"
-#define COL_BLUE    "\033[34m"
-#define COL_MAGENTA "\033[35m"
-#define COL_CYAN    "\033[36m"
-#define COL_WHITE   "\033[37m"
-#define COL_BRED    "\033[1;31m"
-#define COL_BGREEN  "\033[1;32m"
-#define COL_BYELLOW "\033[1;33m"
-#define COL_BBLUE   "\033[1;34m"
-#define COL_BCYAN   "\033[1;36m"
+/* ANSI Color & Style Codes (Dynamic based on g_use_color) */
+extern int g_use_color;
+void init_color_support(int argc, char *argv[]);
+
+#define COL_RESET   (g_use_color ? "\033[0m" : "")
+#define COL_BOLD    (g_use_color ? "\033[1m" : "")
+#define COL_DIM     (g_use_color ? "\033[2m" : "")
+#define COL_RED     (g_use_color ? "\033[31m" : "")
+#define COL_GREEN   (g_use_color ? "\033[32m" : "")
+#define COL_YELLOW  (g_use_color ? "\033[33m" : "")
+#define COL_BLUE    (g_use_color ? "\033[34m" : "")
+#define COL_MAGENTA (g_use_color ? "\033[35m" : "")
+#define COL_CYAN    (g_use_color ? "\033[36m" : "")
+#define COL_WHITE   (g_use_color ? "\033[37m" : "")
+#define COL_BRED    (g_use_color ? "\033[1;31m" : "")
+#define COL_BGREEN  (g_use_color ? "\033[1;32m" : "")
+#define COL_BYELLOW (g_use_color ? "\033[1;33m" : "")
+#define COL_BBLUE   (g_use_color ? "\033[1;34m" : "")
+#define COL_BCYAN   (g_use_color ? "\033[1;36m" : "")
 
 /* Tokenizer */
 typedef enum {

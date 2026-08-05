@@ -87,19 +87,60 @@ static int is_empty_line(const char *str) {
   return 1;
 }
 
+int g_use_color = 1;
+
+void init_color_support(int argc, char *argv[]) {
+  /* Check command line arguments for --no-color, -n, --color=never */
+  int i;
+  for (i = 1; i < argc; i++) {
+    if (strcmp(argv[i], "--no-color") == 0 ||
+        strcmp(argv[i], "-n") == 0 ||
+        strcmp(argv[i], "--color=never") == 0) {
+      g_use_color = 0;
+      return;
+    }
+  }
+
+  /* Check standard NO_COLOR environment variable (http://no-color.org/) */
+  if (getenv("NO_COLOR") != NULL) {
+    g_use_color = 0;
+    return;
+  }
+
+  /* Check SHELLY_NO_COLOR environment variable */
+  if (getenv("SHELLY_NO_COLOR") != NULL) {
+    g_use_color = 0;
+    return;
+  }
+
+  /* Check TERM environment variable for dumb/unsupported terminal */
+  const char *term = getenv("TERM");
+  if (term == NULL || strcmp(term, "dumb") == 0) {
+    g_use_color = 0;
+    return;
+  }
+
+  /* If stdout is not a TTY (e.g. redirected to a file), disable colors */
+  if (!isatty(STDOUT_FILENO)) {
+    g_use_color = 0;
+    return;
+  }
+
+  g_use_color = 1;
+}
+
 int main(int argc, char *argv[]) {
-  (void)argc;
-  (void)argv;
   uid_t euid;
-  gid_t egid;
   struct passwd *user_data;
-  struct group *group_data;
   char cwd[MAX_PATH];
   char display_path[MAX_PATH];
   char *input = NULL;
   Token *tokens = NULL;
   int token_count = 0;
   AST *root = NULL;
+
+  /* Initialize color support */
+  init_color_support(argc, argv);
 
   /* Setting shell home dir */
   if (getcwd(g_shell_home, sizeof(g_shell_home)) == NULL) {
@@ -108,17 +149,19 @@ int main(int argc, char *argv[]) {
   }
   g_has_shell_home = 1;
 
-  /* Welcome banner */
-  printf("\n");
-  printf(COL_BCYAN "  ____  _          _ _       " COL_RESET "\n");
-  printf(COL_BCYAN " / ___|| |__   ___| | |_   _ " COL_RESET "\n");
-  printf(COL_BCYAN " \\___ \\| '_ \\ / _ \\ | | | | |" COL_RESET "\n");
-  printf(COL_BCYAN "  ___) | | | |  __/ | | |_| |" COL_RESET "\n");
-  printf(COL_BCYAN " |____/|_| |_|\\___|_|_|\\__, |" COL_RESET "\n");
-  printf(COL_BCYAN "                        |___/ " COL_RESET "\n");
-  printf(COL_DIM "  Version 2.1.22" COL_RESET "\n");
-  printf("\n");
-  fflush(stdout);
+  /* Welcome banner: display only in interactive mode */
+  if (isatty(STDIN_FILENO)) {
+    printf("\n");
+    printf("%s  ____  _          _ _       %s\n", COL_BCYAN, COL_RESET);
+    printf("%s / ___|| |__   ___| | |_   _ %s\n", COL_BCYAN, COL_RESET);
+    printf("%s \\___ \\| '_ \\ / _ \\ | | | | |%s\n", COL_BCYAN, COL_RESET);
+    printf("%s  ___) | | | |  __/ | | |_| |%s\n", COL_BCYAN, COL_RESET);
+    printf("%s |____/|_| |_|\\___|_|_|\\__, |%s\n", COL_BCYAN, COL_RESET);
+    printf("%s                        |___/ %s\n", COL_BCYAN, COL_RESET);
+    printf("%s  Version 2.1.22%s\n", COL_DIM, COL_RESET);
+    printf("\n");
+    fflush(stdout);
+  }
 
   struct sigaction sa;
   sa.sa_handler = sigchld_handler;
@@ -141,13 +184,14 @@ int main(int argc, char *argv[]) {
   do {
     /* (1.) show the shell prompt */
     euid = geteuid();
-    egid = getegid();
-
     user_data = getpwuid(euid);
-    group_data = getgrgid(egid);
-
     const char *user_name = user_data ? user_data->pw_name : "user";
-    const char *group_name = group_data ? group_data->gr_name : "group";
+
+    char hostname[256];
+    if (gethostname(hostname, sizeof(hostname)) != 0) {
+      strncpy(hostname, "localhost", sizeof(hostname) - 1);
+      hostname[sizeof(hostname) - 1] = '\0';
+    }
 
     if (getcwd(cwd, MAX_PATH) == NULL) {
       perror("getcwd() failed");
@@ -174,10 +218,18 @@ int main(int argc, char *argv[]) {
       snprintf(display_path, sizeof(display_path), "%s", cwd);
     }
 
-    char prompt = ((int)euid == 0) ? '#' : '$';
-    printf(COL_BGREEN "%s" COL_DIM "@" COL_GREEN "%s" COL_RESET ":" COL_BCYAN
-                      "%s" COL_BYELLOW "%c " COL_RESET,
-           user_name, group_name, display_path, prompt);
+    if ((int)euid == 0) {
+      printf("%s%s%s@%s%s%s%s:%s[%s]%s%s#%s ",
+             COL_BGREEN, user_name, COL_DIM, COL_RESET,
+             COL_GREEN, hostname, COL_RESET,
+             COL_BCYAN, display_path, COL_RESET,
+             COL_BYELLOW, COL_RESET);
+    } else {
+      printf("%s%s%s@%s%s%s%s:%s[%s]%s ",
+             COL_BGREEN, user_name, COL_DIM, COL_RESET,
+             COL_GREEN, hostname, COL_RESET,
+             COL_BCYAN, display_path, COL_RESET);
+    }
     fflush(stdout);
 
     /* (2.) read a line */
@@ -195,7 +247,7 @@ int main(int argc, char *argv[]) {
 
     /* (3.) parse cmd into tokens */
     if (tokenize_input(input, &tokens, &token_count) < 0) {
-      fprintf(stderr, COL_BRED "error: " COL_RESET "tokenization failed\n");
+      fprintf(stderr, "%serror: %stokenization failed\n", COL_BRED, COL_RESET);
       free(input);
       input = NULL;
       continue;
