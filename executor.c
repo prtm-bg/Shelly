@@ -1,4 +1,4 @@
-#include "shell.h"\n\n/* Pipe functions */
+#include "shell.h"  /* Pipe functions */
 
 /* Adding all pipe nodes to an AST node list */
 void collect_pipeline_nodes(AST *node, AST **nodes, int *count) {

@@ -1,4 +1,4 @@
-#include "shell.h"\n\n/* Global Variables for pwd to be made shell home dir */
+#include "shell.h"   /* Global Variables for pwd to be made shell home dir */
 int g_has_shell_home = 0;
 char g_shell_home[MAX_PATH];
 
