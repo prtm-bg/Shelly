@@ -12,9 +12,12 @@ void sigchld_handler(int sig) {
   errno = saved_errno;
 }
 
+volatile sig_atomic_t g_sigint_received = 0;
+
 /* SIGINT handler to avoid killing the shell prompt */
 void sigint_handler(int sig) {
   (void)sig;
+  g_sigint_received = 1;
   write(STDOUT_FILENO, "\n", 1);
 }
 
@@ -28,11 +31,19 @@ char *read_line(void) {
     return NULL;
   }
 
+  g_sigint_received = 0;
+
   while (1) {
     char c;
     ssize_t n = read(STDIN_FILENO, &c, 1);
     if (n < 0) {
       if (errno == EINTR) {
+        if (g_sigint_received) {
+          /* Discard current input line on Ctrl+C and return empty string */
+          g_sigint_received = 0;
+          buf[0] = '\0';
+          return buf;
+        }
         continue;
       }
       free(buf);
@@ -121,7 +132,7 @@ int main(int argc, char *argv[]) {
   struct sigaction sa_int;
   sa_int.sa_handler = sigint_handler;
   sigemptyset(&sa_int.sa_mask);
-  sa_int.sa_flags = SA_RESTART;
+  sa_int.sa_flags = 0; /* Do not restart syscalls on SIGINT so read() returns EINTR */
   if (sigaction(SIGINT, &sa_int, NULL) == -1) {
     perror("sigaction(SIGINT)");
     exit(1);
