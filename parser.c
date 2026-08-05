@@ -93,6 +93,9 @@ AST *parse_command(Parser *p) {
       p->pos++;
       if (parser_peek(p)->type != TOK_WORD) {
         fprintf(stderr, "parse error: expected file for redirection\n");
+        for (int k = 0; k < argc; k++) {
+          free(argv[k]);
+        }
         free(argv);
         if (file_in)
           free(file_in);
@@ -122,6 +125,13 @@ AST *parse_command(Parser *p) {
       argv = (char **)realloc(argv, (size_t)cap * sizeof(char *));
       if (argv == NULL) {
         perror("realloc() failed");
+        for (int k = 0; k < argc; k++) {
+          free(argv[k]);
+        }
+        if (file_in)
+          free(file_in);
+        if (file_out)
+          free(file_out);
         return NULL;
       }
     }
@@ -196,22 +206,25 @@ AST *parse_sequence(Parser *p) {
     return NULL;
   }
 
-  while (parser_peek(p)->type == TOK_SEMI || parser_peek(p)->type == TOK_BG) {
-    TokenType sep = parser_peek(p)->type;
+  if (parser_peek(p)->type == TOK_BG) {
+    left->background = 1;
     p->pos++;
+  } else if (parser_peek(p)->type == TOK_SEMI) {
+    p->pos++;
+  }
 
-    if (sep == TOK_BG) {
-      left->background = 1;
-    }
-
-    if (parser_peek(p)->type == TOK_EOF) {
-      break;
-    }
-
+  while (parser_peek(p)->type != TOK_EOF) {
     AST *right = parse_and_or(p);
     if (right == NULL) {
       /* Trailing separator is allowed */
       break;
+    }
+
+    if (parser_peek(p)->type == TOK_BG) {
+      right->background = 1;
+      p->pos++;
+    } else if (parser_peek(p)->type == TOK_SEMI) {
+      p->pos++;
     }
 
     left = create_ast_node(NODE_SEMI, left, right);

@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -55,6 +57,9 @@ typedef struct AST {
 /* Global Variables */
 extern int g_has_shell_home;
 extern char g_shell_home[MAX_PATH];
+
+/* Input Function */
+char *read_line(void);
 
 /* Lexer Functions */
 char *dup_n(const char *src, int n);

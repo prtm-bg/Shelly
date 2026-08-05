@@ -1,6 +1,21 @@
-# some basic gitignore 
-
-
+# Object and binary files
 *.o
+shelly
+
+# Debug artifacts
+*.dSYM/
+
+# Temporary and editor files
+*.swp
+*~
 steps.txt
 myshell_backup.c
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

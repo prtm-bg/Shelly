@@ -45,27 +45,30 @@ int tokenize_input(const char *input, Token **out_tokens, int *out_count) {
   while (input[i] != '\0') {
     if (isspace((unsigned char)input[i])) {
       i++;
+    } else if (input[i] == '#') {
+      /* Comment: ignore the rest of the line */
+      break;
     } else if (input[i] == ';') {
       if (push_token(&tokens, &count, &cap, TOK_SEMI, input + i, 1) < 0) {
-        free(tokens);
+        free_tokens(tokens, count);
         return -1;
       }
       i++;
     } else if (input[i] == '&' && input[i + 1] == '&') {
       if (push_token(&tokens, &count, &cap, TOK_AND, input + i, 2) < 0) {
-        free(tokens);
+        free_tokens(tokens, count);
         return -1;
       }
       i += 2;
     } else if (input[i] == '|' && input[i + 1] == '|') {
       if (push_token(&tokens, &count, &cap, TOK_OR, input + i, 2) < 0) {
-        free(tokens);
+        free_tokens(tokens, count);
         return -1;
       }
       i += 2;
     } else if (input[i] == '|') {
       if (push_token(&tokens, &count, &cap, TOK_PIPE, input + i, 1) < 0) {
-        free(tokens);
+        free_tokens(tokens, count);
         return -1;
       }
       i++;
@@ -73,27 +76,27 @@ int tokenize_input(const char *input, Token **out_tokens, int *out_count) {
       if (input[i + 1] == '>') {
         if (push_token(&tokens, &count, &cap, TOK_REDIR_APPEND, input + i, 2) <
             0) {
-          free(tokens);
+          free_tokens(tokens, count);
           return -1;
         }
         i += 2;
       } else {
         if (push_token(&tokens, &count, &cap, TOK_REDIR_OUT, input + i, 1) <
             0) {
-          free(tokens);
+          free_tokens(tokens, count);
           return -1;
         }
         i++;
       }
     } else if (input[i] == '<') {
       if (push_token(&tokens, &count, &cap, TOK_REDIR_IN, input + i, 1) < 0) {
-        free(tokens);
+        free_tokens(tokens, count);
         return -1;
       }
       i++;
     } else if (input[i] == '&') {
       if (push_token(&tokens, &count, &cap, TOK_BG, input + i, 1) < 0) {
-        free(tokens);
+        free_tokens(tokens, count);
         return -1;
       }
       i++;
@@ -106,7 +109,7 @@ int tokenize_input(const char *input, Token **out_tokens, int *out_count) {
         if (!in_single && !in_double &&
             (isspace((unsigned char)input[i]) || input[i] == ';' ||
              input[i] == '|' || input[i] == '&' || input[i] == '<' ||
-             input[i] == '>')) {
+             input[i] == '>' || input[i] == '#')) {
           break;
         }
         if (input[i] == '\'' && !in_double)
@@ -116,7 +119,12 @@ int tokenize_input(const char *input, Token **out_tokens, int *out_count) {
         i++;
       }
 
-      char *clean = malloc(i - start + 1);
+      char *clean = (char *)malloc((size_t)(i - start + 1));
+      if (clean == NULL) {
+        perror("malloc() failed");
+        free_tokens(tokens, count);
+        return -1;
+      }
       int c_idx = 0;
       int j;
       in_single = 0;
@@ -133,17 +141,15 @@ int tokenize_input(const char *input, Token **out_tokens, int *out_count) {
       clean[c_idx] = '\0';
       if (push_token(&tokens, &count, &cap, TOK_WORD, clean, c_idx) < 0) {
         free(clean);
-        {
-          free(tokens);
-          return -1;
-        }
+        free_tokens(tokens, count);
+        return -1;
       }
       free(clean);
     }
   }
 
   if (push_token(&tokens, &count, &cap, TOK_EOF, "<eof>", 5) < 0) {
-    free(tokens);
+    free_tokens(tokens, count);
     return -1;
   }
   *out_tokens = tokens;

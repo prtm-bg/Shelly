@@ -1,14 +1,84 @@
-#include "shell.h"   /* Global Variables for pwd to be made shell home dir */
+#include "shell.h"
+
 int g_has_shell_home = 0;
 char g_shell_home[MAX_PATH];
 
+/* SIGCHLD handler for background jobs */
 void sigchld_handler(int sig) {
+  (void)sig;
   int saved_errno = errno;
   while (waitpid(-1, NULL, WNOHANG) > 0)
     ;
   errno = saved_errno;
 }
+
+/* SIGINT handler to avoid killing the shell prompt */
+void sigint_handler(int sig) {
+  (void)sig;
+  write(STDOUT_FILENO, "\n", 1);
+}
+
+/* Read a line from STDIN using read() system call */
+char *read_line(void) {
+  size_t cap = 128;
+  size_t len = 0;
+  char *buf = (char *)malloc(cap);
+  if (!buf) {
+    perror("malloc() failed");
+    return NULL;
+  }
+
+  while (1) {
+    char c;
+    ssize_t n = read(STDIN_FILENO, &c, 1);
+    if (n < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      free(buf);
+      return NULL;
+    }
+    if (n == 0) {
+      /* EOF reached */
+      if (len == 0) {
+        free(buf);
+        return NULL;
+      }
+      break;
+    }
+    if (c == '\n') {
+      break;
+    }
+    buf[len++] = c;
+    if (len + 1 >= cap) {
+      cap *= 2;
+      char *new_buf = (char *)realloc(buf, cap);
+      if (!new_buf) {
+        perror("realloc() failed");
+        free(buf);
+        return NULL;
+      }
+      buf = new_buf;
+    }
+  }
+
+  buf[len] = '\0';
+  return buf;
+}
+
+/* Check if string is empty or contains only whitespace */
+static int is_empty_line(const char *str) {
+  while (*str) {
+    if (!isspace((unsigned char)*str))
+      return 0;
+    str++;
+  }
+  return 1;
+}
+
 int main(int argc, char *argv[]) {
+  (void)argc;
+  (void)argv;
   uid_t euid;
   gid_t egid;
   struct passwd *user_data;
@@ -32,28 +102,29 @@ int main(int argc, char *argv[]) {
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
   if (sigaction(SIGCHLD, &sa, NULL) == -1) {
-    perror("sigaction");
+    perror("sigaction(SIGCHLD)");
+    exit(1);
+  }
+
+  struct sigaction sa_int;
+  sa_int.sa_handler = sigint_handler;
+  sigemptyset(&sa_int.sa_mask);
+  sa_int.sa_flags = SA_RESTART;
+  if (sigaction(SIGINT, &sa_int, NULL) == -1) {
+    perror("sigaction(SIGINT)");
     exit(1);
   }
 
   do {
-    /* (1.) show the shell prompt
-       (your login name should be your mysh prompt, get your login name
-       programmatically) */
+    /* (1.) show the shell prompt */
     euid = geteuid();
     egid = getegid();
 
     user_data = getpwuid(euid);
-    if (user_data == NULL) {
-      perror("getepwuid() failed");
-      exit(1);
-    }
-
     group_data = getgrgid(egid);
-    if (group_data == NULL) {
-      perror("getgrgid() failed");
-      exit(1);
-    }
+
+    const char *user_name = user_data ? user_data->pw_name : "user";
+    const char *group_name = group_data ? group_data->gr_name : "group";
 
     if (getcwd(cwd, MAX_PATH) == NULL) {
       perror("getcwd() failed");
@@ -76,23 +147,28 @@ int main(int argc, char *argv[]) {
       else {
         snprintf(display_path, sizeof(display_path), "%s", cwd);
       }
-    }
-    /* Using pwd, as shell home not set */
-    else {
+    } else {
       snprintf(display_path, sizeof(display_path), "%s", cwd);
     }
 
     char prompt = ((int)euid == 0) ? '#' : '$';
-    printf("%s@%s:%s%c ", user_data->pw_name, group_data->gr_name, display_path,
-           prompt);
+    printf("%s@%s:%s%c ", user_name, group_name, display_path, prompt);
+    fflush(stdout);
 
-    /* (2.) read a line in a string variable, say, cmd */
-    if (scanf(" %m[^\n]", &input) != 1) {
+    /* (2.) read a line */
+    input = read_line();
+    if (input == NULL) {
       break;
     }
 
-    /* (3.) parse cmd into subcommands, in "command1 ; command2" command1 and
-     * command2 are subcommands */
+    /* Skip blank lines */
+    if (is_empty_line(input)) {
+      free(input);
+      input = NULL;
+      continue;
+    }
+
+    /* (3.) parse cmd into tokens */
     if (tokenize_input(input, &tokens, &token_count) < 0) {
       fprintf(stderr, "Tokenization failed\n");
       free(input);
@@ -100,11 +176,19 @@ int main(int argc, char *argv[]) {
       continue;
     }
 
-    /* (4.) parse the subcommands for command line arguments */
+    /* If only EOF token (e.g. comment-only line), skip execution */
+    if (token_count <= 1 || tokens[0].type == TOK_EOF) {
+      free_tokens(tokens, token_count);
+      tokens = NULL;
+      token_count = 0;
+      free(input);
+      input = NULL;
+      continue;
+    }
+
+    /* (4.) parse tokens to AST */
     if (parse_tokens_to_ast(tokens, token_count, &root) == 0) {
-      /* (5.) if a subcommand is internal then do what is necessary for it.
-       * (6.) Else if there is an executable for the command then fork() and let
-       * the child process execute the executable */
+      /* (5.) execute AST */
       execute_ast(root);
       free_ast(root);
       root = NULL;
