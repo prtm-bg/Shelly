@@ -1,6 +1,6 @@
 # some basic gitignore 
 
 
-
+*.o
 steps.txt
 myshell_backup.c

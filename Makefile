@@ -3,7 +3,7 @@ CFLAGS=-Wall -g
 
 SRCS=shelly.c lexer.c parser.c executor.c
 OBJS=$(SRCS:.c=.o)
-TARGET=mysh
+TARGET=shelly
 
 all: $(TARGET)
 
