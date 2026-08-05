@@ -97,6 +97,18 @@ int main(int argc, char *argv[]) {
   }
   g_has_shell_home = 1;
 
+  /* Welcome banner */
+  printf("\n");
+  printf(COL_BCYAN "  ____  _          _ _       " COL_RESET "\n");
+  printf(COL_BCYAN " / ___|| |__   ___| | |_   _ " COL_RESET "\n");
+  printf(COL_BCYAN " \\___ \\| '_ \\ / _ \\ | | | | |" COL_RESET "\n");
+  printf(COL_BCYAN "  ___) | | | |  __/ | | |_| |" COL_RESET "\n");
+  printf(COL_BCYAN " |____/|_| |_|\\___|_|_|\\__, |" COL_RESET "\n");
+  printf(COL_BCYAN "                        |___/ " COL_RESET "\n");
+  printf(COL_DIM "  Version 2.1.22" COL_RESET "\n");
+  printf("\n");
+  fflush(stdout);
+
   struct sigaction sa;
   sa.sa_handler = sigchld_handler;
   sigemptyset(&sa.sa_mask);
@@ -152,7 +164,9 @@ int main(int argc, char *argv[]) {
     }
 
     char prompt = ((int)euid == 0) ? '#' : '$';
-    printf("%s@%s:%s%c ", user_name, group_name, display_path, prompt);
+    printf(COL_BGREEN "%s" COL_DIM "@" COL_GREEN "%s" COL_RESET ":" COL_BCYAN
+                      "%s" COL_BYELLOW "%c " COL_RESET,
+           user_name, group_name, display_path, prompt);
     fflush(stdout);
 
     /* (2.) read a line */
@@ -170,7 +184,7 @@ int main(int argc, char *argv[]) {
 
     /* (3.) parse cmd into tokens */
     if (tokenize_input(input, &tokens, &token_count) < 0) {
-      fprintf(stderr, "Tokenization failed\n");
+      fprintf(stderr, COL_BRED "error: " COL_RESET "tokenization failed\n");
       free(input);
       input = NULL;
       continue;
