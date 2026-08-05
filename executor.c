@@ -2,7 +2,7 @@
 
 /* Helper to expand ~ and change directory */
 static int change_directory(const char *target) {
-  char resolved[MAX_PATH];
+  char resolved[PATH_MAX * 2];
   const char *home = g_has_shell_home ? g_shell_home : getenv("HOME");
   if (!home) {
     home = getenv("HOME");
@@ -17,6 +17,12 @@ static int change_directory(const char *target) {
   } else if (strncmp(target, "~/", 2) == 0) {
     if (home == NULL) {
       fprintf(stderr, "%scd: %sHOME not set\n", COL_BRED, COL_RESET);
+      return 1;
+    }
+    size_t home_len = strlen(home);
+    size_t target_len = strlen(target + 2);
+    if (home_len + 1 + target_len >= sizeof(resolved)) {
+      fprintf(stderr, "%scd: %spath too long\n", COL_BRED, COL_RESET);
       return 1;
     }
     snprintf(resolved, sizeof(resolved), "%s/%s", home, target + 2);

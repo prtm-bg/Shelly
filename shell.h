@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <grp.h>
+#include <limits.h>
 #include <pwd.h>
 #include <signal.h>
 #include <stdio.h>
@@ -16,7 +17,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define MAX_PATH 512
+#define MAX_PATH PATH_MAX
 #define MAX_SUB_CMD_SIZE 128
 #define MAX_CMD_SIZE 64
 
