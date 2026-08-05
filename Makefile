@@ -1,7 +1,7 @@
 CC=gcc
 CFLAGS=-Wall -g
 
-SRCS=main.c lexer.c parser.c executor.c
+SRCS=shelly.c lexer.c parser.c executor.c
 OBJS=$(SRCS:.c=.o)
 TARGET=mysh
 
