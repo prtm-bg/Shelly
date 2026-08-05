@@ -10,13 +10,13 @@ static int change_directory(const char *target) {
 
   if (target == NULL || strcmp(target, "~") == 0) {
     if (home == NULL) {
-      fprintf(stderr, "cd: HOME not set\n");
+      fprintf(stderr, COL_BRED "cd: " COL_RESET "HOME not set\n");
       return 1;
     }
     target = home;
   } else if (strncmp(target, "~/", 2) == 0) {
     if (home == NULL) {
-      fprintf(stderr, "cd: HOME not set\n");
+      fprintf(stderr, COL_BRED "cd: " COL_RESET "HOME not set\n");
       return 1;
     }
     snprintf(resolved, sizeof(resolved), "%s/%s", home, target + 2);
@@ -358,7 +358,7 @@ int execute_ast(AST *node) {
       node->background = 0;
       exit(execute_ast(node));
     } else {
-      printf("[PID] %d\n", bg_pid);
+      printf(COL_DIM "[" COL_BYELLOW "PID" COL_DIM "] " COL_RESET "%d\n", bg_pid);
       fflush(stdout);
       return 0;
     }

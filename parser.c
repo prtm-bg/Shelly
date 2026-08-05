@@ -92,7 +92,7 @@ AST *parse_command(Parser *p) {
       TokenType rtype = tok->type;
       p->pos++;
       if (parser_peek(p)->type != TOK_WORD) {
-        fprintf(stderr, "parse error: expected file for redirection\n");
+        fprintf(stderr, COL_BRED "parse error: " COL_RESET "expected file for redirection\n");
         for (int k = 0; k < argc; k++) {
           free(argv[k]);
         }
@@ -240,7 +240,7 @@ int parse_tokens_to_ast(Token *tokens, int token_count, AST **out_root) {
 
   for (i = 0; i < token_count; i++) {
     if (tokens[i].type == TOK_INVALID) {
-      fprintf(stderr, "parse error: invalid token '%s'\n", tokens[i].text);
+      fprintf(stderr, COL_BRED "parse error: " COL_RESET "invalid token '%s'\n", tokens[i].text);
       return -1;
     }
   }
@@ -251,12 +251,12 @@ int parse_tokens_to_ast(Token *tokens, int token_count, AST **out_root) {
 
   root = parse_sequence(&p);
   if (root == NULL) {
-    fprintf(stderr, "parse error: invalid command syntax\n");
+    fprintf(stderr, COL_BRED "parse error: " COL_RESET "invalid command syntax\n");
     return -1;
   }
 
   if (parser_peek(&p)->type != TOK_EOF) {
-    fprintf(stderr, "parse error: extra tokens after command\n");
+    fprintf(stderr, COL_BRED "parse error: " COL_RESET "extra tokens after command\n");
     free_ast(root);
     return -1;
   }
