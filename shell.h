@@ -2,21 +2,21 @@
 #define SHELL_H
 
 #define _GNU_SOURCE
-#include <ctype.h>      /* */
-#include <errno.h>      /* errorno */
-#include <fcntl.h>      /* read(), write() */
-#include <grp.h>    
-#include <limits.h>
-#include <pwd.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
-#include <termios.h>
+#include <ctype.h>      /* isspace(), isalpha() */
+#include <errno.h>      /* errno, perror() */
+#include <fcntl.h>      /* open(), O_RDONLY, O_WRONLY, O_CREAT, O_APPEND, O_TRUNC */
+#include <grp.h>        /* getgrgid() */
+#include <limits.h>     /* PATH_MAX */
+#include <pwd.h>        /* getpwuid() */
+#include <signal.h>     /* signal(), sigaction(), sigemptyset(), sigprocmask(), SIGINT, SIGQUIT, SIGCHLD */
+#include <stdio.h>      /* printf(), fprintf(), perror(), snprintf() */
+#include <stdlib.h>     /* malloc(), calloc(), realloc(), free(), exit() */
+#include <string.h>     /* strlen(), strcmp(), strncmp(), memcpy(), strncpy(), strdup() */
+#include <sys/stat.h>   /* stat(), S_ISDIR */
+#include <sys/types.h>  /* uid_t, gid_t, pid_t */
+#include <sys/wait.h>   /* waitpid(), WIFEXITED(), WEXITSTATUS(), WIFSIGNALED(), WTERMSIG() */
+#include <unistd.h>     /* read(), write(), fork(), execvp(), pipe(), dup2(), close(), chdir(), getcwd(), access() */
+#include <termios.h>    /* tcgetattr(), tcsetattr() */
 
 /* Path and Command Size Limits */
 #define MAX_PATH PATH_MAX

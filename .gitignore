@@ -19,3 +19,5 @@ myshell_backup.c
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+.vscode/
