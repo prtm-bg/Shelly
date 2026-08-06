@@ -2,10 +2,10 @@
 #define SHELL_H
 
 #define _GNU_SOURCE
-#include <ctype.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <grp.h>
+#include <ctype.h>      /* */
+#include <errno.h>      /* errorno */
+#include <fcntl.h>      /* read(), write() */
+#include <grp.h>    
 #include <limits.h>
 #include <pwd.h>
 #include <signal.h>
@@ -16,7 +16,9 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <termios.h>
 
+/* Path and Command Size Limits */
 #define MAX_PATH PATH_MAX
 #define MAX_SUB_CMD_SIZE 128
 #define MAX_CMD_SIZE 64
@@ -80,7 +82,12 @@ extern int g_has_shell_home;
 extern char g_shell_home[MAX_PATH];
 
 /* Input Function */
-char *read_line(void);
+char *read_line(void);                      /* Simple line reading (piped input) */
+char *read_line_cursor(const char *prompt); /* Interactive line reading with cursor control */
+
+/* Terminal Mode functions */
+void enable_raw_mode(void);
+void disable_raw_mode(void);
 
 /* Lexer Functions */
 char *dup_n(const char *src, int n);
@@ -95,5 +102,6 @@ int parse_tokens_to_ast(Token *tokens, int token_count, AST **out_root);
 
 /* Executor Functions */
 int execute_ast(AST *node);
+
 
 #endif /* SHELL_H */
