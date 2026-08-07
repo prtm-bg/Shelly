@@ -75,13 +75,13 @@ void enable_raw_mode(void) {
     }
     /* Check critical flags */
     if ((verify.c_lflag & (ECHO | ICANON | ISIG | IEXTEN)) != 0) {
-        fprintf(stderr, "Warning: lflag not fully raw (got 0%o)\n", verify.c_lflag);
+        fprintf(stderr, "Warning: lflag not fully raw (got 0%lo)\n", (unsigned long)verify.c_lflag);
     }
     if ((verify.c_iflag & (IXON | ICRNL | ISTRIP)) != 0) {
-        fprintf(stderr, "Warning: iflag not fully raw (got 0%o)\n", verify.c_iflag);
+        fprintf(stderr, "Warning: iflag not fully raw (got 0%lo)\n", (unsigned long)verify.c_iflag);
     }
     if ((verify.c_oflag & OPOST) != 0) {
-        fprintf(stderr, "Warning: oflag not fully raw (got 0%o)\n", verify.c_oflag);
+        fprintf(stderr, "Warning: oflag not fully raw (got 0%lo)\n", (unsigned long)verify.c_oflag);
     }
     if (verify.c_cc[VMIN] != 1 || verify.c_cc[VTIME] != 0) {
         fprintf(stderr,
@@ -198,8 +198,12 @@ static void redraw_input_line(const char *prompt, size_t prompt_len_raw,
     write(STDOUT_FILENO, buf, len);
 
     char pos[32];
-    snprintf(pos, sizeof(pos), "\r\033[%zuC", prompt_len_vis + cursor);
-    write(STDOUT_FILENO, pos, strlen(pos));
+    if (prompt_len_vis + cursor > 0) {
+        snprintf(pos, sizeof(pos), "\r\033[%zuC", prompt_len_vis + cursor);
+        write(STDOUT_FILENO, pos, strlen(pos));
+    } else {
+        write(STDOUT_FILENO, "\r", 1);
+    }
 }
 
 /* Function to delete the word to left of the cursor */
@@ -219,8 +223,8 @@ static void delete_word_left(char *buf, size_t *len, size_t *cursor) {
 }
 
 /*
-** Read a line  from STDIN with full cursor support
-** (left/right arrows, home, end, delete, backspace)
+** Read a line from STDIN with full cursor and history support
+** (up/down arrows for history, left/right arrows, home, end, delete, backspace)
 */
 char *read_line_cursor(const char *prompt) {
     size_t cap = 128;
@@ -233,6 +237,12 @@ char *read_line_cursor(const char *prompt) {
         perror("malloc() failed");
         return NULL;
     }
+    buf[0] = '\0';
+
+    /* History navigation state for this prompt */
+    int hist_count = history_count();
+    int hist_index = hist_count; /* points past the end (current uncommitted input) */
+    char *saved_draft = NULL;
 
     /* Enable raw mode for cursor control */
     enable_raw_mode();
@@ -251,6 +261,10 @@ char *read_line_cursor(const char *prompt) {
                 /* Handle SIGINT (Ctrl+C) */
                 if (g_sigint_received) {
                     g_sigint_received = 0;
+                    if (saved_draft) {
+                        free(saved_draft);
+                        saved_draft = NULL;
+                    }
                     write(STDOUT_FILENO, "\r\n", 2);
                     disable_raw_mode();
                     buf[0] = '\0';
@@ -258,11 +272,13 @@ char *read_line_cursor(const char *prompt) {
                 }
                 continue;
             }
+            if (saved_draft) free(saved_draft);
             disable_raw_mode();
             free(buf);
             return NULL;
         }
         if (n == 0) { // EOF (Ctrl+D)
+            if (saved_draft) free(saved_draft);
             if (len == 0) {
                 disable_raw_mode();
                 free(buf);
@@ -286,13 +302,83 @@ char *read_line_cursor(const char *prompt) {
                 continue;
             }
 
-            if (seq[0] != '[')
+            if (seq[0] != '[' && seq[0] != 'O')
                 continue;
 
             if (read(STDIN_FILENO, &seq[1], 1) != 1)
                 continue;
 
             switch (seq[1]) {
+                case 'A': // Up arrow: previous history entry
+                    if (hist_count > 0 && hist_index > 0) {
+                        /* If leaving the current input line, save draft */
+                        if (hist_index == hist_count) {
+                            if (saved_draft) free(saved_draft);
+                            saved_draft = strdup(buf);
+                        }
+                        hist_index--;
+                        const char *hist_entry = history_get(hist_index);
+                        if (hist_entry) {
+                            size_t entry_len = strlen(hist_entry);
+                            if (entry_len + 1 > cap) {
+                                cap = entry_len + 64;
+                                char *new_buf = (char *)realloc(buf, cap);
+                                if (!new_buf) {
+                                    perror("realloc() failed");
+                                    break;
+                                }
+                                buf = new_buf;
+                            }
+                            memcpy(buf, hist_entry, entry_len + 1);
+                            len = entry_len;
+                            cursor = len;
+                        }
+                    }
+                    break;
+
+                case 'B': // Down arrow: next history entry
+                    if (hist_index < hist_count) {
+                        hist_index++;
+                        if (hist_index == hist_count) {
+                            /* Restored to bottom: show draft or empty */
+                            const char *restore_str = saved_draft ? saved_draft : "";
+                            size_t restore_len = strlen(restore_str);
+                            if (restore_len + 1 > cap) {
+                                cap = restore_len + 64;
+                                char *new_buf = (char *)realloc(buf, cap);
+                                if (!new_buf) {
+                                    perror("realloc() failed");
+                                    break;
+                                }
+                                buf = new_buf;
+                            }
+                            memcpy(buf, restore_str, restore_len + 1);
+                            len = restore_len;
+                            cursor = len;
+                            if (saved_draft) {
+                                free(saved_draft);
+                                saved_draft = NULL;
+                            }
+                        } else {
+                            const char *hist_entry = history_get(hist_index);
+                            if (hist_entry) {
+                                size_t entry_len = strlen(hist_entry);
+                                if (entry_len + 1 > cap) {
+                                    cap = entry_len + 64;
+                                    char *new_buf = (char *)realloc(buf, cap);
+                                    if (!new_buf) {
+                                        perror("realloc() failed");
+                                        break;
+                                    }
+                                    buf = new_buf;
+                                }
+                                memcpy(buf, hist_entry, entry_len + 1);
+                                len = entry_len;
+                                cursor = len;
+                            }
+                        }
+                    }
+                    break;
 
                 case 'C': // Right arrow
                     if (cursor < len)
@@ -308,6 +394,18 @@ char *read_line_cursor(const char *prompt) {
                 case 'F': // End
                     cursor = len;
                     break;
+                case '1': // Home (ESC [ 1 ~)
+                case '7': // Home (ESC [ 7 ~)
+                    if (read(STDIN_FILENO, &seq[2], 1) == 1 && seq[2] == '~') {
+                        cursor = 0;
+                    }
+                    break;
+                case '4': // End (ESC [ 4 ~)
+                case '8': // End (ESC [ 8 ~)
+                    if (read(STDIN_FILENO, &seq[2], 1) == 1 && seq[2] == '~') {
+                        cursor = len;
+                    }
+                    break;
                 case '3': // Delete key (ESC [ 3 ~)
                     if (read(STDIN_FILENO, &seq[2], 1) == 1 && seq[2] == '~') {
                         if (cursor < len) {
@@ -316,14 +414,18 @@ char *read_line_cursor(const char *prompt) {
                         }
                     }
                     break;
-                }
-                redraw_input_line(prompt, prompt_len_raw, prompt_len_vis, buf,
-                                  len, cursor);
-                continue;
+            }
+            redraw_input_line(prompt, prompt_len_raw, prompt_len_vis, buf,
+                              len, cursor);
+            continue;
         }
 
         /* Enter key */
         if (c == '\n' || c == '\r') {
+            if (saved_draft) {
+                free(saved_draft);
+                saved_draft = NULL;
+            }
             write(STDOUT_FILENO, "\r\n", 2);
             break;
         }
@@ -358,6 +460,7 @@ char *read_line_cursor(const char *prompt) {
                 if (!new_buf)
                 {
                     perror("realloc() failed");
+                    if (saved_draft) free(saved_draft);
                     disable_raw_mode();
                     free(buf);
                     return NULL;
@@ -376,11 +479,19 @@ char *read_line_cursor(const char *prompt) {
             write(STDOUT_FILENO, buf, len);
 
             char pos[32];
-            snprintf(pos, sizeof(pos), "\r\033[%zuC", prompt_len_vis + cursor);
-            write(STDOUT_FILENO, pos, strlen(pos));
+            if (prompt_len_vis + cursor > 0) {
+                snprintf(pos, sizeof(pos), "\r\033[%zuC", prompt_len_vis + cursor);
+                write(STDOUT_FILENO, pos, strlen(pos));
+            } else {
+                write(STDOUT_FILENO, "\r", 1);
+            }
         }
     }
 
+    if (saved_draft) {
+        free(saved_draft);
+        saved_draft = NULL;
+    }
     disable_raw_mode();
     buf[len] = '\0';
     return buf;
@@ -389,6 +500,8 @@ char *read_line_cursor(const char *prompt) {
 
 /* Check if string is empty or contains only whitespace */
 static int is_empty_line(const char *str) {
+    if (!str)
+        return 1;
     while (*str) {
         if (!isspace((unsigned char)*str))
             return 0;
@@ -462,6 +575,9 @@ int main(int argc, char *argv[])
         exit(1);
     }
     g_has_shell_home = 1;
+
+    /* Initialize command history subsystem */
+    history_init();
 
     /* Welcome banner: display only in interactive mode */
     if (isatty(STDIN_FILENO)) {
@@ -567,12 +683,20 @@ int main(int argc, char *argv[])
             input = read_line(); // Non-TTY input (piped/scripted)
         }
 
+        /* Handle EOF */
+        if (!input) {
+            break;
+        }
+
         /* Skip blank lines */
         if (is_empty_line(input)) {
             free(input);
             input = NULL;
             continue;
         }
+
+        /* Record valid command in history */
+        history_add(input);
 
         /* (3.) parse cmd into tokens */
         if (tokenize_input(input, &tokens, &token_count) < 0) {
@@ -613,5 +737,6 @@ int main(int argc, char *argv[])
 
     } while (1);
 
+    history_free();
     return 0;
 }

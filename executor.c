@@ -102,6 +102,13 @@ void run_child_command(AST *node) {
     exit(0);
   } else if (strcmp(arguments[0], "exit") == 0) {
     exit(arguments[1] ? atoi(arguments[1]) : 0);
+  } else if (strcmp(arguments[0], "history") == 0) {
+    if (arguments[1] && strcmp(arguments[1], "-c") == 0) {
+      history_clear();
+    } else {
+      history_print();
+    }
+    exit(0);
   } else {
     execvp(arguments[0], arguments);
     perror(arguments[0]);
@@ -244,6 +251,13 @@ int execute_single_command(char **arguments) {
     return 0;
   } else if (strcmp(arguments[0], "exit") == 0) {
     exit(arguments[1] ? atoi(arguments[1]) : 0);
+  } else if (strcmp(arguments[0], "history") == 0) {
+    if (arguments[1] && strcmp(arguments[1], "-c") == 0) {
+      history_clear();
+    } else {
+      history_print();
+    }
+    return 0;
   }
 
   /* External commands */
