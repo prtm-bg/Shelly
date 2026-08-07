@@ -74,11 +74,17 @@ static void append_to_history_file(const char *cmd) {
     const char *path = get_history_file_path();
     if (!path || path[0] == '\0') return;
 
-    FILE *f = fopen(path, "a");
-    if (!f) return;
+    /* Open with 0600 permissions from the start (avoids race condition with umask) */
+    int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR);
+    if (fd < 0) return;
 
-    /* Enforce private permissions (0600) since commands may contain sensitive info */
-    (void)fchmod(fileno(f), S_IRUSR | S_IWUSR);
+    (void)fchmod(fd, S_IRUSR | S_IWUSR);
+    FILE *f = fdopen(fd, "a");
+    if (!f) {
+        close(fd);
+        return;
+    }
+
     fprintf(f, "%s\n", cmd);
     fclose(f);
 }
@@ -179,10 +185,16 @@ void history_load(const char *path) {
 void history_save(const char *path) {
     if (!path) return;
 
-    FILE *f = fopen(path, "w");
-    if (!f) return;
+    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+    if (fd < 0) return;
 
-    (void)fchmod(fileno(f), S_IRUSR | S_IWUSR);
+    (void)fchmod(fd, S_IRUSR | S_IWUSR);
+    FILE *f = fdopen(fd, "w");
+    if (!f) {
+        close(fd);
+        return;
+    }
+
     for (int i = 0; i < g_history_count; i++) {
         fprintf(f, "%s\n", g_history[i]);
     }
@@ -201,10 +213,10 @@ void history_clear(void) {
 
     const char *path = get_history_file_path();
     if (path) {
-        FILE *f = fopen(path, "w");
-        if (f) {
-            (void)fchmod(fileno(f), S_IRUSR | S_IWUSR);
-            fclose(f);
+        int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+        if (fd >= 0) {
+            (void)fchmod(fd, S_IRUSR | S_IWUSR);
+            close(fd);
         }
     }
 }

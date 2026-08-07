@@ -104,10 +104,10 @@ void run_child_command(AST *node) {
     exit(arguments[1] ? atoi(arguments[1]) : 0);
   } else if (strcmp(arguments[0], "history") == 0) {
     if (arguments[1] && strcmp(arguments[1], "-c") == 0) {
-      history_clear();
-    } else {
-      history_print();
+      fprintf(stderr, "history: -c not supported in pipelines\n");
+      exit(1);
     }
+    history_print();
     exit(0);
   } else {
     execvp(arguments[0], arguments);
