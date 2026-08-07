@@ -321,13 +321,14 @@ char *read_line_cursor(const char *prompt) {
                         if (hist_entry) {
                             size_t entry_len = strlen(hist_entry);
                             if (entry_len + 1 > cap) {
-                                cap = entry_len + 64;
-                                char *new_buf = (char *)realloc(buf, cap);
+                                size_t new_cap = entry_len + 64;
+                                char *new_buf = (char *)realloc(buf, new_cap);
                                 if (!new_buf) {
                                     perror("realloc() failed");
                                     break;
                                 }
                                 buf = new_buf;
+                                cap = new_cap;
                             }
                             memcpy(buf, hist_entry, entry_len + 1);
                             len = entry_len;
@@ -344,13 +345,14 @@ char *read_line_cursor(const char *prompt) {
                             const char *restore_str = saved_draft ? saved_draft : "";
                             size_t restore_len = strlen(restore_str);
                             if (restore_len + 1 > cap) {
-                                cap = restore_len + 64;
-                                char *new_buf = (char *)realloc(buf, cap);
+                                size_t new_cap = restore_len + 64;
+                                char *new_buf = (char *)realloc(buf, new_cap);
                                 if (!new_buf) {
                                     perror("realloc() failed");
                                     break;
                                 }
                                 buf = new_buf;
+                                cap = new_cap;
                             }
                             memcpy(buf, restore_str, restore_len + 1);
                             len = restore_len;
@@ -364,13 +366,14 @@ char *read_line_cursor(const char *prompt) {
                             if (hist_entry) {
                                 size_t entry_len = strlen(hist_entry);
                                 if (entry_len + 1 > cap) {
-                                    cap = entry_len + 64;
-                                    char *new_buf = (char *)realloc(buf, cap);
+                                    size_t new_cap = entry_len + 64;
+                                    char *new_buf = (char *)realloc(buf, new_cap);
                                     if (!new_buf) {
                                         perror("realloc() failed");
                                         break;
                                     }
                                     buf = new_buf;
+                                    cap = new_cap;
                                 }
                                 memcpy(buf, hist_entry, entry_len + 1);
                                 len = entry_len;
@@ -455,8 +458,8 @@ char *read_line_cursor(const char *prompt) {
         /* Printable character */
         if (c >= 32 && c <= 126) {
             if (len + 1 >= cap) {
-                cap *= 2;
-                char *new_buf = (char *)realloc(buf, cap);
+                size_t new_cap = cap * 2;
+                char *new_buf = (char *)realloc(buf, new_cap);
                 if (!new_buf)
                 {
                     perror("realloc() failed");
@@ -466,6 +469,7 @@ char *read_line_cursor(const char *prompt) {
                     return NULL;
                 }
                 buf = new_buf;
+                cap = new_cap;
             }
             memmove(buf + cursor + 1, buf + cursor, len - cursor + 1);
             buf[cursor] = c;
@@ -695,8 +699,10 @@ int main(int argc, char *argv[])
             continue;
         }
 
-        /* Record valid command in history */
-        history_add(input);
+        /* Record valid command in history (interactive sessions only) */
+        if (isatty(STDIN_FILENO)) {
+            history_add(input);
+        }
 
         /* (3.) parse cmd into tokens */
         if (tokenize_input(input, &tokens, &token_count) < 0) {

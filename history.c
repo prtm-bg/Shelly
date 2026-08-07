@@ -77,6 +77,8 @@ static void append_to_history_file(const char *cmd) {
     FILE *f = fopen(path, "a");
     if (!f) return;
 
+    /* Enforce private permissions (0600) since commands may contain sensitive info */
+    (void)fchmod(fileno(f), S_IRUSR | S_IWUSR);
     fprintf(f, "%s\n", cmd);
     fclose(f);
 }
@@ -180,6 +182,7 @@ void history_save(const char *path) {
     FILE *f = fopen(path, "w");
     if (!f) return;
 
+    (void)fchmod(fileno(f), S_IRUSR | S_IWUSR);
     for (int i = 0; i < g_history_count; i++) {
         fprintf(f, "%s\n", g_history[i]);
     }
@@ -199,7 +202,10 @@ void history_clear(void) {
     const char *path = get_history_file_path();
     if (path) {
         FILE *f = fopen(path, "w");
-        if (f) fclose(f);
+        if (f) {
+            (void)fchmod(fileno(f), S_IRUSR | S_IWUSR);
+            fclose(f);
+        }
     }
 }
 
