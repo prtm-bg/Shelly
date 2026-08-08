@@ -2,21 +2,23 @@
 #define SHELL_H
 
 #define _GNU_SOURCE
-#include <ctype.h>      /* isspace(), isalpha() */
-#include <errno.h>      /* errno, perror() */
-#include <fcntl.h>      /* open(), O_RDONLY, O_WRONLY, O_CREAT, O_APPEND, O_TRUNC */
-#include <grp.h>        /* getgrgid() */
-#include <limits.h>     /* PATH_MAX */
-#include <pwd.h>        /* getpwuid() */
-#include <signal.h>     /* signal(), sigaction(), sigemptyset(), sigprocmask(), SIGINT, SIGQUIT, SIGCHLD */
-#include <stdio.h>      /* snprintf(), perror() */
-#include <stdlib.h>     /* malloc(), calloc(), realloc(), free(), exit() */
-#include <string.h>     /* strlen(), strcmp(), strncmp(), memcpy(), strncpy(), strdup() */
-#include <sys/stat.h>   /* stat(), S_ISDIR */
-#include <sys/types.h>  /* uid_t, gid_t, pid_t */
-#include <sys/wait.h>   /* waitpid(), WIFEXITED(), WEXITSTATUS(), WIFSIGNALED(), WTERMSIG() */
-#include <unistd.h>     /* read(), write(), fork(), execvp(), pipe(), dup2(), close(), chdir(), getcwd(), access() */
-#include <termios.h>    /* tcgetattr(), tcsetattr() */
+#include <ctype.h>        /* isspace(), isalpha() */
+#include <errno.h>        /* errno, perror() */
+#include <fcntl.h>        /* open(), O_RDONLY, O_WRONLY, O_CREAT, O_APPEND, O_TRUNC */
+#include <grp.h>          /* getgrgid() */
+#include <limits.h>       /* PATH_MAX */
+#include <pwd.h>          /* getpwuid() */
+#include <time.h>         /* time(), localtime(), strftime() */
+#include <sys/utsname.h>  /* uname() */
+#include <signal.h>       /* signal(), sigaction(), sigemptyset(), sigprocmask(), SIGINT, SIGQUIT, SIGCHLD */
+#include <stdio.h>        /* snprintf(), perror() */
+#include <stdlib.h>       /* malloc(), calloc(), realloc(), free(), exit() */
+#include <string.h>       /* strlen(), strcmp(), strncmp(), memcpy(), strncpy(), strdup() */
+#include <sys/stat.h>     /* stat(), S_ISDIR */
+#include <sys/types.h>    /* uid_t, gid_t, pid_t */
+#include <sys/wait.h>     /* waitpid(), WIFEXITED(), WEXITSTATUS(), WIFSIGNALED(), WTERMSIG() */
+#include <unistd.h>       /* read(), write(), fork(), execvp(), pipe(), dup2(), close(), chdir(), getcwd(), access() */
+#include <termios.h>      /* tcgetattr(), tcsetattr() */
 
 /* Path and Command Size Limits */
 #define MAX_PATH PATH_MAX
@@ -45,36 +47,36 @@ void init_color_support(int argc, char *argv[]);
 
 /* Tokenizer */
 typedef enum {
-  TOK_WORD,
-  TOK_PIPE,
-  TOK_AND,
-  TOK_OR,
-  TOK_SEMI,
-  TOK_REDIR_IN,
-  TOK_REDIR_OUT,
-  TOK_REDIR_APPEND,
-  TOK_BG,
-  TOK_EOF,
-  TOK_INVALID
+    TOK_WORD,
+    TOK_PIPE,
+    TOK_AND,
+    TOK_OR,
+    TOK_SEMI,
+    TOK_REDIR_IN,
+    TOK_REDIR_OUT,
+    TOK_REDIR_APPEND,
+    TOK_BG,
+    TOK_EOF,
+    TOK_INVALID
 } TokenType;
 
 typedef struct {
-  TokenType type;
-  char *text;
+    TokenType type;
+    char *text;
 } Token;
 
 /* Abstract Syntax Tree (AST) */
 typedef enum { NODE_COMMAND, NODE_PIPE, NODE_AND, NODE_OR, NODE_SEMI } NodeType;
 typedef struct AST {
-  NodeType type;
-  struct AST *left;
-  struct AST *right;
-  char **argv;
-  int argc;
-  char *file_in;
-  char *file_out;
-  int append_out;
-  int background;
+    NodeType type;
+    struct AST *left;
+    struct AST *right;
+    char **argv;
+    int argc;
+    char *file_in;
+    char *file_out;
+    int append_out;
+    int background;
 } AST;
 
 /* Global Variables */
