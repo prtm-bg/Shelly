@@ -92,7 +92,9 @@ AST *parse_command(Parser *p) {
       TokenType rtype = tok->type;
       p->pos++;
       if (parser_peek(p)->type != TOK_WORD) {
-        fprintf(stderr, "%sparse error: %sexpected file for redirection\n", COL_BRED, COL_RESET);
+        char err[128];
+        int n = snprintf(err, sizeof(err), "%sparse error: %sexpected file for redirection\n", COL_BRED, COL_RESET);
+        if (n > 0) write(STDERR_FILENO, err, (size_t)n);
         for (int k = 0; k < argc; k++) {
           free(argv[k]);
         }
@@ -240,7 +242,9 @@ int parse_tokens_to_ast(Token *tokens, int token_count, AST **out_root) {
 
   for (i = 0; i < token_count; i++) {
     if (tokens[i].type == TOK_INVALID) {
-      fprintf(stderr, "%sparse error: %sinvalid token '%s'\n", COL_BRED, COL_RESET, tokens[i].text);
+      char err[256];
+      int n = snprintf(err, sizeof(err), "%sparse error: %sinvalid token '%s'\n", COL_BRED, COL_RESET, tokens[i].text);
+      if (n > 0) write(STDERR_FILENO, err, (size_t)n);
       return -1;
     }
   }
@@ -251,12 +255,16 @@ int parse_tokens_to_ast(Token *tokens, int token_count, AST **out_root) {
 
   root = parse_sequence(&p);
   if (root == NULL) {
-    fprintf(stderr, "%sparse error: %sinvalid command syntax\n", COL_BRED, COL_RESET);
+    char err[128];
+    int n = snprintf(err, sizeof(err), "%sparse error: %sinvalid command syntax\n", COL_BRED, COL_RESET);
+    if (n > 0) write(STDERR_FILENO, err, (size_t)n);
     return -1;
   }
 
   if (parser_peek(&p)->type != TOK_EOF) {
-    fprintf(stderr, "%sparse error: %sextra tokens after command\n", COL_BRED, COL_RESET);
+    char err[128];
+    int n = snprintf(err, sizeof(err), "%sparse error: %sextra tokens after command\n", COL_BRED, COL_RESET);
+    if (n > 0) write(STDERR_FILENO, err, (size_t)n);
     free_ast(root);
     return -1;
   }

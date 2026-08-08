@@ -1,7 +1,7 @@
 CC=gcc
 CFLAGS=-Wall -g
 
-SRCS=shelly.c lexer.c parser.c executor.c
+SRCS=shelly.c lexer.c parser.c executor.c history.c
 OBJS=$(SRCS:.c=.o)
 TARGET=shelly
 

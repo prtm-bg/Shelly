@@ -9,7 +9,7 @@
 #include <limits.h>     /* PATH_MAX */
 #include <pwd.h>        /* getpwuid() */
 #include <signal.h>     /* signal(), sigaction(), sigemptyset(), sigprocmask(), SIGINT, SIGQUIT, SIGCHLD */
-#include <stdio.h>      /* printf(), fprintf(), perror(), snprintf() */
+#include <stdio.h>      /* snprintf(), perror() */
 #include <stdlib.h>     /* malloc(), calloc(), realloc(), free(), exit() */
 #include <string.h>     /* strlen(), strcmp(), strncmp(), memcpy(), strncpy(), strdup() */
 #include <sys/stat.h>   /* stat(), S_ISDIR */
@@ -103,5 +103,17 @@ int parse_tokens_to_ast(Token *tokens, int token_count, AST **out_root);
 /* Executor Functions */
 int execute_ast(AST *node);
 
+/* History Functions */
+void history_init(void);
+void history_add(const char *cmd);
+int history_count(void);
+const char *history_get(int index);
+void history_load(const char *path);
+void history_save(const char *path);
+void history_clear(void);
+void history_print(void);
+void history_free(void);
+const char *get_history_file_path(void);
 
 #endif /* SHELL_H */
+
