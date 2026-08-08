@@ -10,19 +10,25 @@ static int change_directory(const char *target) {
 
   if (target == NULL || strcmp(target, "~") == 0) {
     if (home == NULL) {
-      fprintf(stderr, "%scd: %sHOME not set\n", COL_BRED, COL_RESET);
+      char err[128];
+      int n = snprintf(err, sizeof(err), "%scd: %sHOME not set\n", COL_BRED, COL_RESET);
+      if (n > 0) write(STDERR_FILENO, err, (size_t)n);
       return 1;
     }
     target = home;
   } else if (strncmp(target, "~/", 2) == 0) {
     if (home == NULL) {
-      fprintf(stderr, "%scd: %sHOME not set\n", COL_BRED, COL_RESET);
+      char err[128];
+      int n = snprintf(err, sizeof(err), "%scd: %sHOME not set\n", COL_BRED, COL_RESET);
+      if (n > 0) write(STDERR_FILENO, err, (size_t)n);
       return 1;
     }
     size_t home_len = strlen(home);
     size_t target_len = strlen(target + 2);
     if (home_len + 1 + target_len >= sizeof(resolved)) {
-      fprintf(stderr, "%scd: %spath too long\n", COL_BRED, COL_RESET);
+      char err[128];
+      int n = snprintf(err, sizeof(err), "%scd: %spath too long\n", COL_BRED, COL_RESET);
+      if (n > 0) write(STDERR_FILENO, err, (size_t)n);
       return 1;
     }
     snprintf(resolved, sizeof(resolved), "%s/%s", home, target + 2);
@@ -89,8 +95,8 @@ void run_child_command(AST *node) {
     exit(change_directory(arguments[1]));
   } else if (strcmp(arguments[0], "pwd") == 0) {
     if (getcwd(current_dir, sizeof(current_dir)) != NULL) {
-      printf("%s\n", current_dir);
-      fflush(stdout);
+      write(STDOUT_FILENO, current_dir, strlen(current_dir));
+      write(STDOUT_FILENO, "\n", 1);
       exit(0);
     }
     perror("pwd");
@@ -104,7 +110,7 @@ void run_child_command(AST *node) {
     exit(arguments[1] ? atoi(arguments[1]) : 0);
   } else if (strcmp(arguments[0], "history") == 0) {
     if (arguments[1] && strcmp(arguments[1], "-c") == 0) {
-      fprintf(stderr, "history: -c not supported in pipelines\n");
+      write(STDERR_FILENO, "history: -c not supported in pipelines\n", 39);
       exit(1);
     }
     history_print();
@@ -240,8 +246,8 @@ int execute_single_command(char **arguments) {
       perror("pwd");
       return 1;
     } else {
-      printf("%s\n", current_dir);
-      fflush(stdout);
+      write(STDOUT_FILENO, current_dir, strlen(current_dir));
+      write(STDOUT_FILENO, "\n", 1);
     }
     return 0;
   } else if (strcmp(arguments[0], "clear") == 0) {
@@ -378,8 +384,11 @@ int execute_ast(AST *node) {
       node->background = 0;
       exit(execute_ast(node));
     } else {
-      printf("%s[%sPID%s] %s%d\n", COL_DIM, COL_BYELLOW, COL_DIM, COL_RESET, bg_pid);
-      fflush(stdout);
+      char bg_msg[128];
+      int n = snprintf(bg_msg, sizeof(bg_msg), "%s[%sPID%s] %s%d\n", COL_DIM, COL_BYELLOW, COL_DIM, COL_RESET, bg_pid);
+      if (n > 0) {
+        write(STDOUT_FILENO, bg_msg, (size_t)n);
+      }
       return 0;
     }
   }

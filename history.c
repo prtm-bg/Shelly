@@ -79,14 +79,10 @@ static void append_to_history_file(const char *cmd) {
     if (fd < 0) return;
 
     (void)fchmod(fd, S_IRUSR | S_IWUSR);
-    FILE *f = fdopen(fd, "a");
-    if (!f) {
-        close(fd);
-        return;
-    }
-
-    fprintf(f, "%s\n", cmd);
-    fclose(f);
+    size_t cmd_len = strlen(cmd);
+    write(fd, cmd, cmd_len);
+    write(fd, "\n", 1);
+    close(fd);
 }
 
 /* Add a command entry to history */
@@ -129,59 +125,75 @@ void history_add(const char *cmd) {
     append_to_history_file(cmd);
 }
 
-/* Load history entries from disk file */
+/* Load history entries from disk file using read() system call */
 void history_load(const char *path) {
     if (!path) return;
 
-    FILE *f = fopen(path, "r");
-    if (!f) return;
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) return;
 
-    char line[4096];
-    while (fgets(line, sizeof(line), f)) {
-        /* Strip trailing \r and \n */
-        size_t len = strlen(line);
-        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
-            line[--len] = '\0';
-        }
+    struct stat st;
+    if (fstat(fd, &st) < 0 || st.st_size <= 0) {
+        close(fd);
+        return;
+    }
 
-        if (is_whitespace_str(line)) {
-            continue;
-        }
+    char *buf = (char *)malloc((size_t)st.st_size + 1);
+    if (!buf) {
+        close(fd);
+        return;
+    }
 
-        /* Skip consecutive duplicates during load */
-        if (g_history_count > 0 && strcmp(g_history[g_history_count - 1], line) == 0) {
-            continue;
-        }
+    ssize_t total = 0;
+    while (total < st.st_size) {
+        ssize_t n = read(fd, buf + total, (size_t)(st.st_size - total));
+        if (n <= 0) break;
+        total += n;
+    }
+    buf[total] = '\0';
+    close(fd);
 
-        /* Maintain max capacity */
-        if (g_history_count >= g_history_max) {
-            free(g_history[0]);
-            memmove(&g_history[0], &g_history[1], (size_t)(g_history_count - 1) * sizeof(char *));
-            g_history_count--;
-        }
+    /* Tokenize lines from buffer */
+    char *line_start = buf;
+    for (ssize_t i = 0; i <= total; i++) {
+        if (buf[i] == '\n' || buf[i] == '\r' || buf[i] == '\0') {
+            buf[i] = '\0';
+            if (line_start < &buf[i] && !is_whitespace_str(line_start)) {
+                /* Skip consecutive duplicates during load */
+                if (g_history_count == 0 || strcmp(g_history[g_history_count - 1], line_start) != 0) {
+                    /* Maintain max capacity */
+                    if (g_history_count >= g_history_max) {
+                        free(g_history[0]);
+                        memmove(&g_history[0], &g_history[1], (size_t)(g_history_count - 1) * sizeof(char *));
+                        g_history_count--;
+                    }
 
-        if (g_history_count >= g_history_cap) {
-            int new_cap = (g_history_cap == 0) ? 64 : g_history_cap * 2;
-            char **new_history = (char **)realloc(g_history, (size_t)new_cap * sizeof(char *));
-            if (!new_history) {
-                perror("realloc() failed for history");
-                fclose(f);
-                return;
+                    if (g_history_count >= g_history_cap) {
+                        int new_cap = (g_history_cap == 0) ? 64 : g_history_cap * 2;
+                        char **new_history = (char **)realloc(g_history, (size_t)new_cap * sizeof(char *));
+                        if (!new_history) {
+                            perror("realloc() failed for history");
+                            free(buf);
+                            return;
+                        }
+                        g_history = new_history;
+                        g_history_cap = new_cap;
+                    }
+
+                    char *entry = strdup(line_start);
+                    if (entry) {
+                        g_history[g_history_count++] = entry;
+                    }
+                }
             }
-            g_history = new_history;
-            g_history_cap = new_cap;
-        }
-
-        char *entry = strdup(line);
-        if (entry) {
-            g_history[g_history_count++] = entry;
+            line_start = &buf[i + 1];
         }
     }
 
-    fclose(f);
+    free(buf);
 }
 
-/* Save full history to disk file */
+/* Save full history to disk file using write() system call */
 void history_save(const char *path) {
     if (!path) return;
 
@@ -189,17 +201,12 @@ void history_save(const char *path) {
     if (fd < 0) return;
 
     (void)fchmod(fd, S_IRUSR | S_IWUSR);
-    FILE *f = fdopen(fd, "w");
-    if (!f) {
-        close(fd);
-        return;
-    }
-
     for (int i = 0; i < g_history_count; i++) {
-        fprintf(f, "%s\n", g_history[i]);
+        write(fd, g_history[i], strlen(g_history[i]));
+        write(fd, "\n", 1);
     }
 
-    fclose(f);
+    close(fd);
 }
 
 /* Clear all history entries (history -c) */
@@ -221,12 +228,17 @@ void history_clear(void) {
     }
 }
 
-/* Print command history with line numbers (bash style) */
+/* Print command history with line numbers using write() system call (bash style) */
 void history_print(void) {
+    char num_buf[32];
     for (int i = 0; i < g_history_count; i++) {
-        printf("%5d  %s\n", i + 1, g_history[i]);
+        int n = snprintf(num_buf, sizeof(num_buf), "%5d  ", i + 1);
+        if (n > 0) {
+            write(STDOUT_FILENO, num_buf, (size_t)n);
+        }
+        write(STDOUT_FILENO, g_history[i], strlen(g_history[i]));
+        write(STDOUT_FILENO, "\n", 1);
     }
-    fflush(stdout);
 }
 
 /* Free all history allocated memory */

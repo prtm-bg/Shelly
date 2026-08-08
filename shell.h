@@ -9,7 +9,7 @@
 #include <limits.h>     /* PATH_MAX */
 #include <pwd.h>        /* getpwuid() */
 #include <signal.h>     /* signal(), sigaction(), sigemptyset(), sigprocmask(), SIGINT, SIGQUIT, SIGCHLD */
-#include <stdio.h>      /* printf(), fprintf(), perror(), snprintf() */
+#include <stdio.h>      /* snprintf(), perror() */
 #include <stdlib.h>     /* malloc(), calloc(), realloc(), free(), exit() */
 #include <string.h>     /* strlen(), strcmp(), strncmp(), memcpy(), strncpy(), strdup() */
 #include <sys/stat.h>   /* stat(), S_ISDIR */
