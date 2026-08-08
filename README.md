@@ -50,9 +50,12 @@ Shelly is built with a highly modular codebase, mimicking the compilation pipeli
 Shelly supports many modern POSIX-like features via its custom Abstract Syntax Tree (AST) parser:
 
 ### 1. Command History & Arrow Key Navigation
-Navigate through previously executed commands just like in bash terminals:
+Navigate through previously entered commands and modify them with cursor movement, just like in bash terminals:
 - **Up Arrow (`↑`)**: Browse backwards to older commands.
 - **Down Arrow (`↓`)**: Browse forwards to newer commands (restores any typed draft line at the bottom).
+- **Left Arrow (`←`)**: Move the cursor left within the current command line.
+- **Right Arrow (`→`)**: Move the cursor right within the current command line.
+- **Ctrl + Backspace**: Delete the word to the left of the cursor.
 - **Persistent History**: Commands are saved to and loaded from `~/.shelly_history` across sessions.
 
 ### 2. File Redirection

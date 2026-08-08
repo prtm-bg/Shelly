@@ -74,11 +74,11 @@ static void append_to_history_file(const char *cmd) {
     const char *path = get_history_file_path();
     if (!path || path[0] == '\0') return;
 
-    /* Open with 0600 permissions from the start (avoids race condition with umask) */
-    int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR);
+    /* Opening history file */
+    int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0600);
     if (fd < 0) return;
 
-    (void)fchmod(fd, S_IRUSR | S_IWUSR);
+    (void)fchmod(fd, 0600);
     size_t cmd_len = strlen(cmd);
     write(fd, cmd, cmd_len);
     write(fd, "\n", 1);

@@ -75,26 +75,17 @@ void enable_raw_mode(void) {
     }
     /* Check critical flags */
     if ((verify.c_lflag & (ECHO | ICANON | ISIG | IEXTEN)) != 0) {
-        char warn[128];
-        int n = snprintf(warn, sizeof(warn), "Warning: lflag not fully raw (got 0%lo)\n", (unsigned long)verify.c_lflag);
-        if (n > 0) write(STDERR_FILENO, warn, (size_t)n);
+        fprintf(stderr, "Warning: lflag not fully raw (got 0%lo)\n", (unsigned long)verify.c_lflag);
     }
     if ((verify.c_iflag & (IXON | ICRNL | ISTRIP)) != 0) {
-        char warn[128];
-        int n = snprintf(warn, sizeof(warn), "Warning: iflag not fully raw (got 0%lo)\n", (unsigned long)verify.c_iflag);
-        if (n > 0) write(STDERR_FILENO, warn, (size_t)n);
+        fprintf(stderr, "Warning: iflag not fully raw (got 0%lo)\n", (unsigned long)verify.c_iflag);
     }
     if ((verify.c_oflag & OPOST) != 0) {
-        char warn[128];
-        int n = snprintf(warn, sizeof(warn), "Warning: oflag not fully raw (got 0%lo)\n", (unsigned long)verify.c_oflag);
-        if (n > 0) write(STDERR_FILENO, warn, (size_t)n);
+        fprintf(stderr, "Warning: oflag not fully raw (got 0%lo)\n", (unsigned long)verify.c_oflag);
     }
     if (verify.c_cc[VMIN] != 1 || verify.c_cc[VTIME] != 0) {
-        char warn[128];
-        int n = snprintf(warn, sizeof(warn),
-                "Warning: VMIN/VTIME not set correctly (VMIN=%d, VTIME=%d)\n",
+        fprintf(stderr, "Warning: VMIN/VTIME not set correctly (VMIN=%d, VTIME=%d)\n",
                 verify.c_cc[VMIN], verify.c_cc[VTIME]);
-        if (n > 0) write(STDERR_FILENO, warn, (size_t)n);
     }
 }
 
@@ -593,26 +584,16 @@ int main(int argc, char *argv[])
 
     /* Welcome banner: display only in interactive mode */
     if (isatty(STDIN_FILENO)) {
-        char banner[1024];
-        int b_len = snprintf(banner, sizeof(banner),
-            "\n"
-            "%s  ____  _          _ _       %s\n"
-            "%s / ___|| |__   ___| | |_   _ %s\n"
-            "%s \\___ \\| '_ \\ / _ \\ | | | | |%s\n"
-            "%s  ___) | | | |  __/ | | |_| |%s\n"
-            "%s |____/|_| |_|\\___|_|_|\\__, |%s\n"
-            "%s                        |___/ %s\n"
-            "%s  Version 2.1.22%s\n\n",
-            COL_BCYAN, COL_RESET,
-            COL_BCYAN, COL_RESET,
-            COL_BCYAN, COL_RESET,
-            COL_BCYAN, COL_RESET,
-            COL_BCYAN, COL_RESET,
-            COL_BCYAN, COL_RESET,
-            COL_DIM, COL_RESET);
-        if (b_len > 0) {
-            write(STDOUT_FILENO, banner, (size_t)b_len);
-        }
+        printf("\n");
+        printf("%s  ____  _          _ _       %s\n", COL_BCYAN, COL_RESET);
+        printf("%s / ___|| |__   ___| | |_   _ %s\n", COL_BCYAN, COL_RESET);
+        printf("%s \\___ \\| '_ \\ / _ \\ | | | | |%s\n", COL_BCYAN, COL_RESET);
+        printf("%s  ___) | | | |  __/ | | |_| |%s\n", COL_BCYAN, COL_RESET);
+        printf("%s |____/|_| |_|\\___|_|_|\\__, |%s\n", COL_BCYAN, COL_RESET);
+        printf("%s                        |___/ %s\n", COL_BCYAN, COL_RESET);
+        printf("%s  Version 2.1.22%s\n", COL_DIM, COL_RESET);
+        printf("\n");
+        fflush(stdout);
     }
 
     struct sigaction sa;
@@ -723,9 +704,7 @@ int main(int argc, char *argv[])
 
         /* (3.) parse cmd into tokens */
         if (tokenize_input(input, &tokens, &token_count) < 0) {
-            char err[128];
-            int n = snprintf(err, sizeof(err), "%serror: %stokenization failed\n", COL_BRED, COL_RESET);
-            if (n > 0) write(STDERR_FILENO, err, (size_t)n);
+            fprintf(stderr, "%serror: %stokenization failed\n", COL_BRED, COL_RESET);
             free(input);
             input = NULL;
             continue;
