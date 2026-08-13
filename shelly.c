@@ -51,9 +51,8 @@ void enable_raw_mode(void) {
     g_raw_mode_active = 1;
 
     /* configured according to cfmakeraw(), removing unnecessary flags */
-    shell.c_iflag &=
-        ~(IXON | ICRNL | ISTRIP); // disable Ctrl+S/Q, CR->NL, and preserves 8th bit (for UTF-8)
-    shell.c_oflag &= ~OPOST;      // disable output processing
+    shell.c_iflag &= ~(IXON | ICRNL | ISTRIP);         // disable Ctrl+S/Q, CR->NL, and preserves 8th bit (for UTF-8)
+    shell.c_oflag &= ~OPOST;                           // disable output processing
     shell.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG); // Disable echo, canonical mode, extended input processing, and signals
 
     shell.c_cc[VMIN] = 1;  // read() returns when 1B available
@@ -74,13 +73,13 @@ void enable_raw_mode(void) {
     }
     /* Check critical flags */
     if ((verify.c_lflag & (ECHO | ICANON | ISIG | IEXTEN)) != 0) {
-        fprintf(stderr, "Warning: lflag not fully raw (got 0%o)\n", verify.c_lflag);
+        fprintf(stderr, "Warning: lflag not fully raw (got 0%lo)\n", (unsigned long)verify.c_lflag);
     }
     if ((verify.c_iflag & (IXON | ICRNL | ISTRIP)) != 0) {
-        fprintf(stderr, "Warning: iflag not fully raw (got 0%o)\n", verify.c_iflag);
+        fprintf(stderr, "Warning: iflag not fully raw (got 0%lo)\n", (unsigned long)verify.c_iflag);
     }
     if ((verify.c_oflag & OPOST) != 0) {
-        fprintf(stderr, "Warning: oflag not fully raw (got 0%o)\n", verify.c_oflag);
+        fprintf(stderr, "Warning: oflag not fully raw (got 0%lo)\n", (unsigned long)verify.c_oflag);
     }
     if (verify.c_cc[VMIN] != 1 || verify.c_cc[VTIME] != 0) {
         fprintf(stderr, "Warning: VMIN/VTIME not set correctly (VMIN=%d, VTIME=%d)\n",
@@ -158,6 +157,10 @@ char *read_line(void) {
     return buf;
 }
 
+
+/* ---- Helper functions for interactive read from STDIN ---- */
+
+/* Function to calculate the visible length of a string containing ANSI escape codes */
 /* Calculate the visible length of a string containing ANSI escape codes */
 size_t get_visible_len(const char *str) {
     size_t len = 0;
@@ -169,8 +172,9 @@ size_t get_visible_len(const char *str) {
                 while (*str && !isalpha((unsigned char)*str)) {
                     str++;
                 }
-                if (*str)
+                if (*str) {
                     str++;
+                }
             }
         } else {
             len++;
@@ -180,9 +184,73 @@ size_t get_visible_len(const char *str) {
     return len;
 }
 
+
+/* Function to redraw the input line, updating the cursor position */
+static void redraw_input_line(const char *prompt, size_t prompt_len_raw,
+                              size_t prompt_len_vis, const char *buf,
+                              size_t len, size_t cursor) {
+
+    write(STDOUT_FILENO, "\r\033[K", 4);
+    if (prompt)
+        write(STDOUT_FILENO, prompt, prompt_len_raw);
+    write(STDOUT_FILENO, buf, len);
+
+    char pos[32];
+    if (prompt_len_vis + cursor > 0) {
+        snprintf(pos, sizeof(pos), "\r\033[%zuC", prompt_len_vis + cursor);
+        write(STDOUT_FILENO, pos, strlen(pos));
+    } else {
+        write(STDOUT_FILENO, "\r", 1);
+    }
+}
+
+/* Function to delete the word to left of the cursor */
+static void delete_word_left(char *buf, size_t *len, size_t *cursor) {
+    size_t pos = *cursor;
+
+    while (pos > 0 && isspace((unsigned char)buf[pos - 1])) {
+        pos--;
+    }
+    while (pos > 0 && !isspace((unsigned char)buf[pos - 1])) {
+        pos--;
+    }
+
+    memmove(buf + pos, buf + *cursor, *len - *cursor + 1);
+    *len -= *cursor - pos;
+    *cursor = pos;
+}
+
+/* Function to move the cursor left by one word */
+static void move_cursor_word_left(const char *buf, size_t len, size_t *cursor) {
+    size_t pos = *cursor;
+    // Skip any trailing whitespace
+    while (pos > 0 && isspace((unsigned char)buf[pos - 1])) {
+        pos--;
+    }
+    // Skip the word characters
+    while (pos > 0 && !isspace((unsigned char)buf[pos - 1])) {
+        pos--;
+    }
+    *cursor = pos;
+}
+
+/* Function to move the cursor right by one word */
+static void move_cursor_word_right(const char *buf, size_t len, size_t *cursor) {
+    size_t pos = *cursor;
+    // Skip any non-whitespace characters (end of current word)
+    while (pos < len && !isspace((unsigned char)buf[pos])) {
+        pos++;
+    }
+    // Skip any whitespace
+    while (pos < len && isspace((unsigned char)buf[pos])) {
+        pos++;
+    }
+    *cursor = pos;
+}
+
 /*
-** Read a line  from STDIN with full cursor support
-** (left/right arrows, home, end, delete, backspace)
+** Read a line from STDIN with full cursor and history support
+** (up/down arrows for history, left/right arrows, home, end, delete, backspace)
 */
 char *read_line_cursor(const char *prompt) {
     size_t cap = 128;
@@ -190,18 +258,23 @@ char *read_line_cursor(const char *prompt) {
     size_t cursor = 0;
     size_t prompt_len_raw = prompt ? strlen(prompt) : 0;
     size_t prompt_len_vis = prompt ? get_visible_len(prompt) : 0;
-
     char *buf = (char *)malloc(cap);
     if (!buf) {
         perror("malloc() failed");
         return NULL;
     }
+    buf[0] = '\0';
+
+    /* History navigation state for this prompt */
+    int hist_count = history_count();
+    int hist_index = hist_count; /* points past the end (current uncommitted input) */
+    char *saved_draft = NULL;
 
     /* Enable raw mode for cursor control */
     enable_raw_mode();
     g_sigint_received = 0;
 
-    /* Print the initial prompt so it doesn't wait for a keypress! */
+    /* Print the initial prompt */
     if (prompt) {
         write(STDOUT_FILENO, prompt, prompt_len_raw);
     }
@@ -209,11 +282,17 @@ char *read_line_cursor(const char *prompt) {
     while (1) {
         char c;
         ssize_t n = read(STDIN_FILENO, &c, 1);
+
+        // Handling OS-level interrupts
         if (n < 0) {
             if (errno == EINTR) {
                 /* Handle SIGINT (Ctrl+C) */
                 if (g_sigint_received) {
                     g_sigint_received = 0;
+                    if (saved_draft) {
+                        free(saved_draft);
+                        saved_draft = NULL;
+                    }
                     write(STDOUT_FILENO, "\r\n", 2);
                     disable_raw_mode();
                     buf[0] = '\0';
@@ -221,11 +300,13 @@ char *read_line_cursor(const char *prompt) {
                 }
                 continue;
             }
+            if (saved_draft) free(saved_draft);
             disable_raw_mode();
             free(buf);
             return NULL;
         }
         if (n == 0) { // EOF (Ctrl+D)
+            if (saved_draft) free(saved_draft);
             if (len == 0) {
                 disable_raw_mode();
                 free(buf);
@@ -234,16 +315,130 @@ char *read_line_cursor(const char *prompt) {
             break;
         }
 
+        // Handling User input signals
+        /* Ctrl+C (SIGINT) */
+        if (c == 3) {
+            if (saved_draft) {
+                free(saved_draft);
+                saved_draft = NULL;
+            }
+            write(STDOUT_FILENO, "^C\r\n", 4);
+            disable_raw_mode();
+            buf[0] = '\0';
+            return buf;
+        }
+
+        /* Ctrl+D (EOF or delete) */
+        if (c == 4) {
+            if (len == 0) {
+                if (saved_draft) free(saved_draft);
+                disable_raw_mode();
+                free(buf);
+                return NULL;
+            } else if (cursor < len) {
+                memmove(buf + cursor, buf + cursor + 1, len - cursor);
+                len--;
+                redraw_input_line(prompt, prompt_len_raw, prompt_len_vis, buf, len, cursor);
+            }
+            continue;
+        }
+
         /* Handle escape sequences (arrow keys, home, end, delete) */
         if (c == '\x1b') {
             char seq[3];
             if (read(STDIN_FILENO, &seq[0], 1) != 1)
                 continue;
+
+            if (seq[0] == 127 || seq[0] == '\b') {
+                if (cursor > 0) {
+                    delete_word_left(buf, &len, &cursor);
+                }
+                redraw_input_line(prompt, prompt_len_raw, prompt_len_vis, buf,
+                                  len, cursor);
+                continue;
+            }
+
+            if (seq[0] != '[' && seq[0] != 'O')
+                continue;
+
             if (read(STDIN_FILENO, &seq[1], 1) != 1)
                 continue;
 
-            if (seq[0] == '[') {
-                switch (seq[1]) {
+            switch (seq[1]) {
+                case 'A': // Up arrow: previous history entry
+                    if (hist_count > 0 && hist_index > 0) {
+                        /* If leaving the current input line, save draft */
+                        if (hist_index == hist_count) {
+                            if (saved_draft) free(saved_draft);
+                            saved_draft = strdup(buf);
+                        }
+                        hist_index--;
+                        const char *hist_entry = history_get(hist_index);
+                        if (hist_entry) {
+                            size_t entry_len = strlen(hist_entry);
+                            if (entry_len + 1 > cap) {
+                                size_t new_cap = entry_len + 64;
+                                char *new_buf = (char *)realloc(buf, new_cap);
+                                if (!new_buf) {
+                                    perror("realloc() failed");
+                                    break;
+                                }
+                                buf = new_buf;
+                                cap = new_cap;
+                            }
+                            memcpy(buf, hist_entry, entry_len + 1);
+                            len = entry_len;
+                            cursor = len;
+                        }
+                    }
+                    break;
+
+                case 'B': // Down arrow: next history entry
+                    if (hist_index < hist_count) {
+                        hist_index++;
+                        if (hist_index == hist_count) {
+                            /* Restored to bottom: show draft or empty */
+                            const char *restore_str = saved_draft ? saved_draft : "";
+                            size_t restore_len = strlen(restore_str);
+                            if (restore_len + 1 > cap) {
+                                size_t new_cap = restore_len + 64;
+                                char *new_buf = (char *)realloc(buf, new_cap);
+                                if (!new_buf) {
+                                    perror("realloc() failed");
+                                    break;
+                                }
+                                buf = new_buf;
+                                cap = new_cap;
+                            }
+                            memcpy(buf, restore_str, restore_len + 1);
+                            len = restore_len;
+                            cursor = len;
+                            if (saved_draft) {
+                                free(saved_draft);
+                                saved_draft = NULL;
+                            }
+                        } else {
+                            const char *hist_entry = history_get(hist_index);
+                            if (hist_entry) {
+                                size_t entry_len = strlen(hist_entry);
+                                if (entry_len + 1 > cap) {
+                                    size_t new_cap = entry_len + 64;
+                                    char *new_buf = (char *)realloc(buf, new_cap);
+                                    if (!new_buf) {
+                                        perror("realloc() failed");
+                                        break;
+                                    }
+                                    buf = new_buf;
+                                    cap = new_cap;
+                                }
+                                memcpy(buf, hist_entry, entry_len + 1);
+                                len = entry_len;
+                                cursor = len;
+                            }
+                        }
+                    }
+                    break;
+
                 case 'C': // Right arrow
                     if (cursor < len)
                         cursor++;
@@ -258,6 +453,36 @@ char *read_line_cursor(const char *prompt) {
                 case 'F': // End
                     cursor = len;
                     break;
+                case '1': // Home (ESC [ 1 ~) or Ctrl+Left/Right (ESC [ 1 ; 5 ~)
+                case '7': // Home (ESC [ 7 ~)
+                    if (read(STDIN_FILENO, &seq[2], 1) == 1) {
+                        if (seq[2] == '~') {
+                            // Home key
+                            cursor = 0;
+                        } else if (seq[2] == ';') {
+                            // Extended sequence: ESC [ 1 ; 5 D/C
+                            if (read(STDIN_FILENO, &seq[3], 1) == 1 && seq[3] == '5') {
+                                if (read(STDIN_FILENO, &seq[4], 1) == 1) {
+                                    if (seq[4] == 'D') { // Ctrl+Left
+                                        if (cursor > 0) {
+                                            move_cursor_word_left(buf, len, &cursor);
+                                        }
+                                    } else if (seq[4] == 'C') { // Ctrl+Right
+                                        if (cursor < len) {
+                                            move_cursor_word_right(buf, len, &cursor);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    break;
+                case '4': // End (ESC [ 4 ~)
+                case '8': // End (ESC [ 8 ~)
+                    if (read(STDIN_FILENO, &seq[2], 1) == 1 && seq[2] == '~') {
+                        cursor = len;
+                    }
+                    break;
                 case '3': // Delete key (ESC [ 3 ~)
                     if (read(STDIN_FILENO, &seq[2], 1) == 1 && seq[2] == '~') {
                         if (cursor < len) {
@@ -266,21 +491,17 @@ char *read_line_cursor(const char *prompt) {
                         }
                     }
                     break;
-                }
-                /* Redraw line after cursor movement */
-                write(STDOUT_FILENO, "\r\033[K", 4);
-                if (prompt)
-                    write(STDOUT_FILENO, prompt, prompt_len_raw);
-                write(STDOUT_FILENO, buf, len);
-                char pos[32];
-                snprintf(pos, sizeof(pos), "\r\033[%zuC", prompt_len_vis + cursor);
-                write(STDOUT_FILENO, pos, strlen(pos));
-                continue;
             }
+            redraw_input_line(prompt, prompt_len_raw, prompt_len_vis, buf, len, cursor);
+            continue;
         }
 
         /* Enter key */
         if (c == '\n' || c == '\r') {
+            if (saved_draft) {
+                free(saved_draft);
+                saved_draft = NULL;
+            }
             write(STDOUT_FILENO, "\r\n", 2);
             break;
         }
@@ -292,44 +513,60 @@ char *read_line_cursor(const char *prompt) {
                 cursor--;
                 len--;
             }
-            write(STDOUT_FILENO, "\r\033[K", 4);
-            if (prompt)
-                write(STDOUT_FILENO, prompt, prompt_len_raw);
-            write(STDOUT_FILENO, buf, len);
-            char pos[32];
-            snprintf(pos, sizeof(pos), "\r\033[%zuC", prompt_len_vis + cursor);
-            write(STDOUT_FILENO, pos, strlen(pos));
+            redraw_input_line(prompt, prompt_len_raw, prompt_len_vis, buf, len, cursor);
+            continue;
+        }
 
+        /* Ctrl+W: Delete word left */
+        if (c == 23) {
+            if (cursor > 0) {
+                delete_word_left(buf, &len, &cursor);
+            }
+            redraw_input_line(prompt, prompt_len_raw, prompt_len_vis, buf, len, cursor);
             continue;
         }
 
         /* Printable character */
         if (c >= 32 && c <= 126) {
             if (len + 1 >= cap) {
-                cap *= 2;
-                char *new_buf = (char *)realloc(buf, cap);
-                if (!new_buf) {
+                size_t new_cap = cap * 2;
+                char *new_buf = (char *)realloc(buf, new_cap);
+                if (!new_buf)
+                {
                     perror("realloc() failed");
+                    if (saved_draft) free(saved_draft);
                     disable_raw_mode();
                     free(buf);
                     return NULL;
                 }
                 buf = new_buf;
+                cap = new_cap;
             }
             memmove(buf + cursor + 1, buf + cursor, len - cursor + 1);
             buf[cursor] = c;
             cursor++;
             len++;
+
             write(STDOUT_FILENO, "\r\033[K", 4);
-            if (prompt)
+            if (prompt){
                 write(STDOUT_FILENO, prompt, prompt_len_raw);
+            }
             write(STDOUT_FILENO, buf, len);
+
             char pos[32];
-            snprintf(pos, sizeof(pos), "\r\033[%zuC", prompt_len_vis + cursor);
-            write(STDOUT_FILENO, pos, strlen(pos));
+            if (prompt_len_vis + cursor > 0) {
+                snprintf(pos, sizeof(pos), "\r\033[%zuC", prompt_len_vis + cursor);
+                write(STDOUT_FILENO, pos, strlen(pos));
+            } else {
+                write(STDOUT_FILENO, "\r", 1);
+            }
         }
     }
 
+    if (saved_draft) {
+        free(saved_draft);
+        saved_draft = NULL;
+    }
     disable_raw_mode();
     buf[len] = '\0';
     return buf;
@@ -337,6 +574,10 @@ char *read_line_cursor(const char *prompt) {
 
 /* Check if string is empty or contains only whitespace */
 static int is_empty_line(const char *str) {
+    if (!str){
+        return 1;
+    }
+
     while (*str) {
         if (!isspace((unsigned char)*str))
             return 0;
@@ -346,7 +587,6 @@ static int is_empty_line(const char *str) {
 }
 
 int g_use_color = 1;
-
 /* Check command line arguments for --no-color, -n, --color=never */
 void init_color_support(int argc, char *argv[]) {
     int i;
@@ -397,6 +637,7 @@ int main(int argc, char *argv[]) {
     int token_count = 0;
     AST *root = NULL;
 
+
     /* Initialize color support */
     init_color_support(argc, argv);
 
@@ -414,20 +655,19 @@ int main(int argc, char *argv[]) {
             home_dir = pw->pw_dir;
         }
     }
-
     /* Change to home directory if found */
     if (home_dir != NULL) {
         if (chdir(home_dir) != 0) {
             perror("chdir() to home directory failed");
         }
     }
-
     /* Setting shell home dir */
     if (getcwd(g_shell_home, sizeof(g_shell_home)) == NULL) {
         perror("getcwd() failed");
         exit(1);
     }
     g_has_shell_home = 1;
+
 
     /* Welcome banner: display only in interactive mode */
     if (isatty(STDIN_FILENO)) {
@@ -570,10 +810,15 @@ int main(int argc, char *argv[]) {
         /* (2.) read a line */
         if (isatty(STDIN_FILENO)) {
             input = read_line_cursor(prompt_str); // Interactive TTY input with prompt
-        } else {
-            printf("%s", prompt_str); // Print prompt for non-TTY
-            fflush(stdout);
+        }
+        else {
+            write(STDOUT_FILENO, prompt_str, strlen(prompt_str));
             input = read_line(); // Non-TTY input (piped/scripted)
+        }
+
+        /* Handle EOF */
+        if (!input) {
+            break;
         }
 
         /* Skip blank lines */
@@ -581,6 +826,11 @@ int main(int argc, char *argv[]) {
             free(input);
             input = NULL;
             continue;
+        }
+
+        /* Record valid command in history (interactive sessions only) */
+        if (isatty(STDIN_FILENO)) {
+            history_add(input);
         }
 
         /* (3.) parse cmd into tokens */
@@ -620,5 +870,6 @@ int main(int argc, char *argv[]) {
 
     } while (1);
 
+    history_free();
     return 0;
 }
