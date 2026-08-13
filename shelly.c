@@ -400,6 +400,28 @@ int main(int argc, char *argv[]) {
     /* Initialize color support */
     init_color_support(argc, argv);
 
+    /* Get home directory from environment or passwd */
+    const char *home_dir = NULL;
+    if (geteuid() == getuid()) {
+        home_dir = getenv("HOME");
+        if (home_dir != NULL && home_dir[0] == '\0') {
+            home_dir = NULL;
+        }
+    }
+    if (home_dir == NULL) {
+        struct passwd *pw = getpwuid(getuid());
+        if (pw != NULL && pw->pw_dir != NULL && pw->pw_dir[0] != '\0') {
+            home_dir = pw->pw_dir;
+        }
+    }
+
+    /* Change to home directory if found */
+    if (home_dir != NULL) {
+        if (chdir(home_dir) != 0) {
+            perror("chdir() to home directory failed");
+        }
+    }
+
     /* Setting shell home dir */
     if (getcwd(g_shell_home, sizeof(g_shell_home)) == NULL) {
         perror("getcwd() failed");
