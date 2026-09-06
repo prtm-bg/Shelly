@@ -1,5 +1,9 @@
-#include "shell.h" 
+#include "parser.h"
+#include "shell.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 typedef struct {
     Token *tokens;
@@ -11,58 +15,13 @@ typedef struct {
 #define strdup _strdup
 #endif
 
-/* ---- AST functions ---- */
-
-/* AST node creation */
-AST *create_ast_node(NodeType type, AST *left, AST *right) {
-    AST *node = (AST *)calloc(1, sizeof(AST));
-    if (node == NULL) {
-        perror("calloc() failed");
-        exit(1);
-    }
-    node->type = type;
-    node->left = left;
-    node->right = right;
-    node->argv = NULL;
-    node->argc = 0;
-    node->file_in = NULL;
-    node->file_out = NULL;
-    node->append_out = 0;
-    node->background = 0;
-
-    return node;
-}
-/* Free AST recursively */
-void free_ast(AST *node) {
-    int i;
-
-    if (node == NULL) {
-        return;
-    }
-    free_ast(node->left);
-    free_ast(node->right);
-
-    if (node->argv != NULL) {
-        for (i = 0; i < node->argc; i++) {
-            free(node->argv[i]);
-        }
-        free(node->argv);
-    }
-    if (node->file_in) {
-        free(node->file_in);
-    }
-    if (node->file_out) {
-        free(node->file_out);
-    }
-    free(node);
-}
-
 /* ---- Parser functions ---- */
 
 /* Peek at the current token */
-Token *parser_peek(Parser *p) { return &p->tokens[p->pos]; }
+static Token *parser_peek(Parser *p) { return &p->tokens[p->pos]; }
+
 /* Match the current token with the expected type */
-int parser_match(Parser *p, TokenType type) {
+static int parser_match(Parser *p, TokenType type) {
     if (parser_peek(p)->type == type) {
         p->pos++;
         return 1;
@@ -70,9 +29,8 @@ int parser_match(Parser *p, TokenType type) {
     return 0;
 }
 
-
 /* Parse a command (a sequence of words) */
-AST *parse_command(Parser *p) {
+static AST *parse_command(Parser *p) {
     int cap = 8;
     int argc = 0;
     char **argv = (char **)malloc((size_t)cap * sizeof(char *));
@@ -163,8 +121,9 @@ AST *parse_command(Parser *p) {
     node->append_out = append_out;
     return node;
 }
+
 /* Parsing pipe expression */
-AST *parse_pipeline(Parser *p) {
+static AST *parse_pipeline(Parser *p) {
     AST *left = parse_command(p);
 
     if (left == NULL) {
@@ -181,8 +140,9 @@ AST *parse_pipeline(Parser *p) {
 
     return left;
 }
+
 /* Parse &&/|| expressions */
-AST *parse_and_or(Parser *p) {
+static AST *parse_and_or(Parser *p) {
     AST *left = parse_pipeline(p);
 
     if (left == NULL) {
@@ -209,8 +169,9 @@ AST *parse_and_or(Parser *p) {
 
     return left;
 }
+
 /* Parsing sequence separated by ; or & */
-AST *parse_sequence(Parser *p) {
+static AST *parse_sequence(Parser *p) {
     AST *left = parse_and_or(p);
 
     if (left == NULL) {
@@ -245,6 +206,7 @@ AST *parse_sequence(Parser *p) {
 
     return left;
 }
+
 /* Parsing tokens into AST */
 int parse_tokens_to_ast(Token *tokens, int token_count, AST **out_root) {
     Parser p;

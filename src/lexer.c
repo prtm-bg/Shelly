@@ -1,5 +1,10 @@
-#include "shell.h" 
+#include "lexer.h"
+#include "shell.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
 
 /* Duplicates a string */
 char *dup_n(const char *src, int n) {
@@ -12,6 +17,7 @@ char *dup_n(const char *src, int n) {
     out[n] = '\0';
     return out;
 }
+
 /* Pushes a token to the token list */
 int push_token(Token **tokens, int *count, int *cap, TokenType type,
                const char *start, int n) {

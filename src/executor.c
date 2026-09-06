@@ -1,44 +1,18 @@
+#include "executor.h"
 #include "shell.h"
+#include "history_store.h"
 
-/* Helper to expand ~ and change directory */
-static int change_directory(const char *target) {
-    char resolved[PATH_MAX * 2];
-    const char *home = g_has_shell_home ? g_shell_home : getenv("HOME");
-    if (!home) {
-        home = getenv("HOME");
-    }
-
-    if (target == NULL || strcmp(target, "~") == 0) {
-        if (home == NULL) {
-            fprintf(stderr, "%scd: %sHOME not set\n", COL_BRED, COL_RESET);
-            return 1;
-        }
-        target = home;
-    }
-    else if (strncmp(target, "~/", 2) == 0) {
-        if (home == NULL) {
-            fprintf(stderr, "%scd: %sHOME not set\n", COL_BRED, COL_RESET);
-            return 1;
-        }
-        size_t home_len = strlen(home);
-        size_t target_len = strlen(target + 2);
-        if (home_len + 1 + target_len >= sizeof(resolved)) {
-            fprintf(stderr, "%scd: %spath too long\n", COL_BRED, COL_RESET);
-            return 1;
-        }
-        snprintf(resolved, sizeof(resolved), "%s/%s", home, target + 2);
-        target = resolved;
-    }
-
-    if (chdir(target) != 0) {
-        perror("cd");
-        return 1;
-    }
-    return 0;
-}
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <errno.h>
+#include <fcntl.h>
 
 /* Adding all pipe nodes to an AST node list */
-void collect_pipeline_nodes(AST *node, AST **nodes, int *count) {
+static void collect_pipeline_nodes(AST *node, AST **nodes, int *count) {
     if (node == NULL) {
         return;
     }
@@ -55,8 +29,7 @@ void collect_pipeline_nodes(AST *node, AST **nodes, int *count) {
 }
 
 /* Execute a single child command in pipe */
-void run_child_command(AST *node) {
-    char current_dir[MAX_PATH];
+static void run_child_command(AST *node) {
     char **arguments = node->argv;
 
     signal(SIGINT, SIG_DFL);
@@ -87,16 +60,10 @@ void run_child_command(AST *node) {
     }
 
     if (strcmp(arguments[0], "cd") == 0) {
-        exit(change_directory(arguments[1]));
+        exit(builtin_cd(arguments));
     }
     else if (strcmp(arguments[0], "pwd") == 0) {
-        if (getcwd(current_dir, sizeof(current_dir)) != NULL) {
-            write(STDOUT_FILENO, current_dir, strlen(current_dir));
-            write(STDOUT_FILENO, "\n", 1);
-            exit(0);
-        }
-        perror("pwd");
-        exit(1);
+        exit(builtin_pwd());
     }
     else if (strcmp(arguments[0], "clear") == 0) {
         if (write(STDOUT_FILENO, "\033[H\033[J", 7) < 0) {
@@ -112,8 +79,7 @@ void run_child_command(AST *node) {
             write(STDERR_FILENO, "history: -c not supported in pipelines\n", 39);
             exit(1);
         }
-        history_print();
-        exit(0);
+        exit(builtin_history(arguments, 0));
     }
     else {
         execvp(arguments[0], arguments);
@@ -123,7 +89,7 @@ void run_child_command(AST *node) {
 }
 
 /* Execute pipeline commands */
-int run_pipeline(AST *node) {
+static int run_pipeline(AST *node) {
     AST *nodes[MAX_SUB_CMD_SIZE];
     pid_t pids[MAX_SUB_CMD_SIZE];
     int count = 0;
@@ -231,10 +197,9 @@ int run_pipeline(AST *node) {
 }
 
 /* Helper to execute builtin or external commands */
-int execute_single_command(char **arguments) {
+static int execute_single_command(char **arguments) {
     pid_t pid;
     int status = 0;
-    char current_dir[MAX_PATH];
     int ret_val = 0;
 
     if (arguments == NULL || arguments[0] == NULL) {
@@ -243,18 +208,10 @@ int execute_single_command(char **arguments) {
 
     /* Internal commands */
     if (strcmp(arguments[0], "cd") == 0) {
-        return change_directory(arguments[1]);
+        return builtin_cd(arguments);
     }
     else if (strcmp(arguments[0], "pwd") == 0) {
-        if (getcwd(current_dir, sizeof(current_dir)) == NULL) {
-            perror("pwd");
-            return 1;
-        }
-        else {
-            write(STDOUT_FILENO, current_dir, strlen(current_dir));
-            write(STDOUT_FILENO, "\n", 1);
-        }
-        return 0;
+        return builtin_pwd();
     }
     else if (strcmp(arguments[0], "clear") == 0) {
         if (write(STDOUT_FILENO, "\033[H\033[J", 7) < 0) {
@@ -266,13 +223,7 @@ int execute_single_command(char **arguments) {
         exit(arguments[1] ? atoi(arguments[1]) : 0);
     }
     else if (strcmp(arguments[0], "history") == 0) {
-        if (arguments[1] && strcmp(arguments[1], "-c") == 0) {
-            history_clear();
-        }
-        else {
-            history_print();
-        }
-        return 0;
+        return builtin_history(arguments, 0);
     }
 
     /* External commands */
@@ -317,7 +268,7 @@ int execute_single_command(char **arguments) {
 }
 
 /* Executes a single command with redirections */
-int run_command(AST *node) {
+static int run_command(AST *node) {
     int ret_val = 0;
     int orig_stdin = -1;
     int orig_stdout = -1;
@@ -441,9 +392,3 @@ int execute_ast(AST *node) {
 
     return -1;
 }
-
-/* Operator precedence :
-    1. | (pipe) [left to right]
-    2. && (logical AND), || (logical OR) [left to right]
-    4. ; (command separator)   [left to right]
-*/

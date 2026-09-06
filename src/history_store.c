@@ -1,6 +1,14 @@
+#include "history_store.h"
 #include "shell.h"
 
-/* History storage variables */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <ctype.h>
+#include <sys/stat.h>
+
 #define MAX_HISTORY_DEFAULT 1000
 
 static char **g_history = NULL;

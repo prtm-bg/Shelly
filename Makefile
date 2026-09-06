@@ -1,7 +1,7 @@
 CC=gcc
-CFLAGS=-Wall -g
+CFLAGS=-Wall -g -Iinclude
 
-SRCS=shelly.c lexer.c parser.c executor.c history.c
+SRCS=$(wildcard src/*.c) $(wildcard src/builtins/*.c)
 OBJS=$(SRCS:.c=.o)
 TARGET=shelly
 
@@ -10,7 +10,7 @@ all: $(TARGET)
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS)
 
-%.o: %.c shell.h
+%.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
